@@ -23,7 +23,17 @@
 	// Animation state
 	let showResult = false;
 
+	// Camera selection state
+	let currentFacingMode: 'user' | 'environment' = 'user'; // 'user' = front, 'environment' = back
+	let isMobileDevice = false;
+
 	onMount(async () => {
+		// Detect if device is mobile
+		isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+		
+		// Set default camera based on device type
+		currentFacingMode = isMobileDevice ? 'environment' : 'user';
+		
 		try {
 			model = await tmImage.load(modelURL, metadataURL);
 			console.log('✅ AI model loaded successfully');
@@ -41,9 +51,10 @@
 			prediction = '';
 			showResult = false;
 			
-			// Request camera with better constraints for laptops
+			// Request camera with facing mode
 			stream = await navigator.mediaDevices.getUserMedia({ 
 				video: { 
+					facingMode: currentFacingMode,
 					width: { ideal: 1280 },
 					height: { ideal: 720 }
 				} 
@@ -74,6 +85,17 @@
 			alert('Unable to access camera. Please allow permission.');
 			console.error(error);
 		}
+	}
+
+	async function switchCamera() {
+		// Toggle between front and back camera
+		currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+		
+		// Close current camera
+		closeCamera();
+		
+		// Reopen with new facing mode
+		await openCamera();
 	}
 
 	async function capturePhoto() {
@@ -279,6 +301,16 @@
 								</svg>
 								Capture Photo
 							</button>
+
+							<button
+								class="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-500 hover:to-yellow-500 transition-all duration-300 px-8 py-4 rounded-xl font-semibold text-white shadow-lg hover:shadow-orange-500/50 hover:scale-105 transform flex items-center gap-3"
+								on:click={switchCamera}
+							>
+								<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+								</svg>
+								{currentFacingMode === 'user' ? 'Switch to Back' : 'Switch to Front'}
+							</button>
 						{/if}
 
 						{#if (imagePreview || cameraActive) && !loading}
@@ -309,6 +341,9 @@
 								<div class="absolute top-4 left-4 bg-red-500 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-2 animate-pulse">
 									<span class="w-2 h-2 bg-white rounded-full"></span>
 									LIVE
+								</div>
+								<div class="absolute top-4 right-4 bg-black/50 text-white px-4 py-2 rounded-full text-sm font-semibold">
+									{currentFacingMode === 'user' ? '🤳 Front' : '📷 Back'}
 								</div>
 							</div>
 						{/if}
