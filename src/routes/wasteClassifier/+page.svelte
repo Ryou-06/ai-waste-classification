@@ -341,7 +341,7 @@
 								<svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
 								</svg>
-								<span class="hidden sm:inline">Capture Photo</span>
+								<span class="hidden sm:inline">Capture Photo!</span>
 								<span class="sm:hidden">Capture</span>
 							</button>
 
