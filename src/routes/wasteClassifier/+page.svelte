@@ -27,6 +27,11 @@
 	let currentFacingMode: 'user' | 'environment' = 'user'; // 'user' = front, 'environment' = back
 	let isMobileDevice = false;
 
+	// Double tap detection
+	let lastTapTime = 0;
+	let tapTimeout: any = null;
+	let showFlipAnimation = false;
+
 	onMount(async () => {
 		// Detect if device is mobile
 		isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -88,14 +93,49 @@
 	}
 
 	async function switchCamera() {
+		// Show flip animation
+		showFlipAnimation = true;
+		
 		// Toggle between front and back camera
 		currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
 		
 		// Close current camera
 		closeCamera();
 		
+		// Wait a bit for animation
+		await new Promise(resolve => setTimeout(resolve, 200));
+		
 		// Reopen with new facing mode
 		await openCamera();
+		
+		// Hide flip animation
+		setTimeout(() => {
+			showFlipAnimation = false;
+		}, 600);
+	}
+
+	function handleVideoTap(event: MouseEvent | TouchEvent) {
+		const currentTime = new Date().getTime();
+		const tapInterval = currentTime - lastTapTime;
+
+		// Clear any existing timeout
+		if (tapTimeout) {
+			clearTimeout(tapTimeout);
+		}
+
+		// If tapped within 300ms, it's a double tap
+		if (tapInterval < 300 && tapInterval > 0) {
+			// Double tap detected!
+			switchCamera();
+			lastTapTime = 0; // Reset to prevent triple tap
+		} else {
+			// Single tap - wait to see if there's another tap
+			lastTapTime = currentTime;
+			tapTimeout = setTimeout(() => {
+				// Single tap action (optional - you can add single tap behavior here)
+				lastTapTime = 0;
+			}, 300);
+		}
 	}
 
 	async function capturePhoto() {
@@ -268,60 +308,64 @@
 			<div class="bg-slate-800/50 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-700/50 overflow-hidden">
 				<!-- Upload Section -->
 				<div class="p-8">
-					<div class="flex flex-wrap gap-4 justify-center mb-8">
+					<div class="flex flex-wrap gap-3 justify-center mb-8 px-2">
 						<label class="group relative cursor-pointer">
-							<div class="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 transition-all duration-300 px-8 py-4 rounded-xl font-semibold text-white shadow-lg hover:shadow-green-500/50 hover:scale-105 transform flex items-center gap-3">
-								<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<div class="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:shadow-green-500/50 hover:scale-105 transform flex items-center gap-2 text-sm md:text-base md:px-8 md:py-4">
+								<svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
 								</svg>
-								Upload Image
+								<span class="hidden sm:inline">Upload Image</span>
+								<span class="sm:hidden">Upload</span>
 							</div>
 							<input type="file" accept="image/*" class="hidden" on:change={handleFileUpload} />
 						</label>
 
 						<button
-							class="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 transition-all duration-300 px-8 py-4 rounded-xl font-semibold text-white shadow-lg hover:shadow-blue-500/50 hover:scale-105 transform flex items-center gap-3"
+							class="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:shadow-blue-500/50 hover:scale-105 transform flex items-center gap-2 text-sm md:text-base md:px-8 md:py-4"
 							on:click={openCamera}
 							disabled={cameraActive}
 						>
-							<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
 							</svg>
-							{cameraActive ? 'Camera Active' : 'Open Camera'}
+							<span class="hidden sm:inline">{cameraActive ? 'Camera Active' : 'Open Camera'}</span>
+							<span class="sm:hidden">{cameraActive ? 'Active' : 'Camera'}</span>
 						</button>
 
 						{#if cameraActive}
 							<button
-								class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all duration-300 px-8 py-4 rounded-xl font-semibold text-white shadow-lg hover:shadow-purple-500/50 hover:scale-105 transform flex items-center gap-3"
+								class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:shadow-purple-500/50 hover:scale-105 transform flex items-center gap-2 text-sm md:text-base md:px-8 md:py-4"
 								on:click={capturePhoto}
 							>
-								<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
 								</svg>
-								Capture Photo
+								<span class="hidden sm:inline">Capture Photo</span>
+								<span class="sm:hidden">Capture</span>
 							</button>
 
-							<button
-								class="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-500 hover:to-yellow-500 transition-all duration-300 px-8 py-4 rounded-xl font-semibold text-white shadow-lg hover:shadow-orange-500/50 hover:scale-105 transform flex items-center gap-3"
+							<!-- <button
+								class="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-500 hover:to-yellow-500 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:shadow-orange-500/50 hover:scale-105 transform flex items-center gap-2 text-sm md:text-base md:px-8 md:py-4"
 								on:click={switchCamera}
 							>
-								<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
 								</svg>
-								{currentFacingMode === 'user' ? 'Switch to Back' : 'Switch to Front'}
-							</button>
+								<span class="hidden sm:inline">{currentFacingMode === 'user' ? 'Switch to Back' : 'Switch to Front'}</span>
+								<span class="sm:hidden">🔄 Flip</span>
+							</button> -->
 						{/if}
 
 						{#if (imagePreview || cameraActive) && !loading}
 							<button
-								class="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600 transition-all duration-300 px-8 py-4 rounded-xl font-semibold text-white shadow-lg hover:shadow-slate-500/50 hover:scale-105 transform flex items-center gap-3"
+								class="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:shadow-slate-500/50 hover:scale-105 transform flex items-center gap-2 text-sm md:text-base md:px-8 md:py-4"
 								on:click={resetClassifier}
 							>
-								<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
 								</svg>
-								Reset
+								<span>Reset</span>
 							</button>
 						{/if}
 					</div>
@@ -332,7 +376,10 @@
 							<div class="relative">
 								<video
 									bind:this={videoElement}
-									class="rounded-2xl border-4 border-blue-500/50 shadow-2xl shadow-blue-500/20 max-w-md w-full"
+									on:click={handleVideoTap}
+									on:touchend={handleVideoTap}
+									class="rounded-2xl border-4 border-blue-500/50 shadow-2xl shadow-blue-500/20 max-w-md w-full cursor-pointer transition-transform duration-300"
+									class:flip-animation={showFlipAnimation}
 									autoplay
 									playsinline
 									muted
@@ -342,9 +389,22 @@
 									<span class="w-2 h-2 bg-white rounded-full"></span>
 									LIVE
 								</div>
-								<div class="absolute top-4 right-4 bg-black/50 text-white px-4 py-2 rounded-full text-sm font-semibold">
+								<div class="absolute top-4 right-4 bg-black/50 text-white px-4 py-2 rounded-full text-sm font-semibold backdrop-blur-sm">
 									{currentFacingMode === 'user' ? '🤳 Front' : '📷 Back'}
 								</div>
+								<!-- Double tap hint overlay -->
+								<div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-full text-xs font-medium backdrop-blur-sm animate-pulse">
+									👆 Double tap to flip camera
+								</div>
+								
+								<!-- Flip animation overlay -->
+								{#if showFlipAnimation}
+									<div class="absolute inset-0 bg-black/50 rounded-2xl flex items-center justify-center backdrop-blur-sm">
+										<div class="text-white text-6xl animate-spin-slow">
+											🔄
+										</div>
+									</div>
+								{/if}
 							</div>
 						{/if}
 
@@ -428,5 +488,36 @@
 
 	video {
 		object-fit: cover;
+		-webkit-user-select: none;
+		user-select: none;
+	}
+
+	.flip-animation {
+		animation: flipCamera 0.6s ease-in-out;
+	}
+
+	@keyframes flipCamera {
+		0% {
+			transform: scaleX(1);
+		}
+		50% {
+			transform: scaleX(0);
+		}
+		100% {
+			transform: scaleX(1);
+		}
+	}
+
+	:global(.animate-spin-slow) {
+		animation: spin 1s linear infinite;
+	}
+
+	@keyframes spin {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
 	}
 </style>
