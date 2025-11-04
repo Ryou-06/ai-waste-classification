@@ -308,67 +308,45 @@
 			<div class="bg-slate-800/50 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-700/50 overflow-hidden">
 				<!-- Upload Section -->
 				<div class="p-8">
-					<div class="flex flex-wrap gap-3 justify-center mb-8 px-2">
-						<label class="group relative cursor-pointer">
-							<div class="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:shadow-green-500/50 hover:scale-105 transform flex items-center gap-2 text-sm md:text-base md:px-8 md:py-4">
-								<svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-								</svg>
-								<span class="hidden sm:inline">Upload Image</span>
-								<span class="sm:hidden">Upload</span>
-							</div>
-							<input type="file" accept="image/*" class="hidden" on:change={handleFileUpload} />
-						</label>
+					<!-- Only show buttons when camera is NOT active -->
+					{#if !cameraActive}
+						<div class="flex flex-wrap gap-3 justify-center mb-8 px-2">
+							<label class="group relative cursor-pointer">
+								<div class="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:shadow-green-500/50 hover:scale-105 transform flex items-center gap-2 text-sm md:text-base md:px-8 md:py-4">
+									<svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+									</svg>
+									<span class="hidden sm:inline">Upload Image</span>
+									<span class="sm:hidden">Upload</span>
+								</div>
+								<input type="file" accept="image/*" class="hidden" on:change={handleFileUpload} />
+							</label>
 
-						<button
-							class="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:shadow-blue-500/50 hover:scale-105 transform flex items-center gap-2 text-sm md:text-base md:px-8 md:py-4"
-							on:click={openCamera}
-							disabled={cameraActive}
-						>
-							<svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-							</svg>
-							<span class="hidden sm:inline">{cameraActive ? 'Camera Active' : 'Open Camera'}</span>
-							<span class="sm:hidden">{cameraActive ? 'Active' : 'Camera'}</span>
-						</button>
-
-						{#if cameraActive}
 							<button
-								class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:shadow-purple-500/50 hover:scale-105 transform flex items-center gap-2 text-sm md:text-base md:px-8 md:py-4"
-								on:click={capturePhoto}
+								class="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:shadow-blue-500/50 hover:scale-105 transform flex items-center gap-2 text-sm md:text-base md:px-8 md:py-4"
+								on:click={openCamera}
 							>
 								<svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
 								</svg>
-								<span class="hidden sm:inline">Capture Photo!</span>
-								<span class="sm:hidden">Capture</span>
+								<span class="hidden sm:inline">Open Camera</span>
+								<span class="sm:hidden">Camera</span>
 							</button>
 
-							<!-- <button
-								class="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-500 hover:to-yellow-500 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:shadow-orange-500/50 hover:scale-105 transform flex items-center gap-2 text-sm md:text-base md:px-8 md:py-4"
-								on:click={switchCamera}
-							>
-								<svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-								</svg>
-								<span class="hidden sm:inline">{currentFacingMode === 'user' ? 'Switch to Back' : 'Switch to Front'}</span>
-								<span class="sm:hidden">🔄 Flip</span>
-							</button> -->
-						{/if}
-
-						{#if (imagePreview || cameraActive) && !loading}
-							<button
-								class="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:shadow-slate-500/50 hover:scale-105 transform flex items-center gap-2 text-sm md:text-base md:px-8 md:py-4"
-								on:click={resetClassifier}
-							>
-								<svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-								</svg>
-								<span>Reset</span>
-							</button>
-						{/if}
-					</div>
+							{#if imagePreview && !loading}
+								<button
+									class="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:shadow-slate-500/50 hover:scale-105 transform flex items-center gap-2 text-sm md:text-base md:px-8 md:py-4"
+									on:click={resetClassifier}
+								>
+									<svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+									</svg>
+									<span>Reset</span>
+								</button>
+							{/if}
+						</div>
+					{/if}
 
 					<!-- Camera/Image Display -->
 					<div class="flex justify-center">
@@ -378,7 +356,7 @@
 									bind:this={videoElement}
 									on:click={handleVideoTap}
 									on:touchend={handleVideoTap}
-									class="rounded-2xl border-4 border-blue-500/50 shadow-2xl shadow-blue-500/20 max-w-md w-full cursor-pointer transition-transform duration-300"
+									class="rounded-2xl border-4 border-blue-500/50 shadow-2xl shadow-blue-500/20 max-w-md w-full transition-transform duration-300"
 									class:flip-animation={showFlipAnimation}
 									autoplay
 									playsinline
@@ -392,9 +370,43 @@
 								<div class="absolute top-4 right-4 bg-black/50 text-white px-4 py-2 rounded-full text-sm font-semibold backdrop-blur-sm">
 									{currentFacingMode === 'user' ? '🤳 Front' : '📷 Back'}
 								</div>
-								<!-- Double tap hint overlay -->
-								<div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-full text-xs font-medium backdrop-blur-sm animate-pulse">
-									👆 Double tap to flip camera
+								
+								<!-- Camera Controls Overlay at Bottom -->
+								<div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-6 rounded-b-2xl">
+									<div class="flex items-center justify-center gap-8">
+										<!-- Close Camera Button -->
+										<button
+											on:click={resetClassifier}
+											class="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md hover:bg-white/30 transition-all duration-300 flex items-center justify-center group"
+											aria-label="Close camera"
+										>
+											<svg class="w-6 h-6 text-white group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+											</svg>
+										</button>
+
+										<!-- Capture Button (Main Circle) -->
+										<button
+											on:click={capturePhoto}
+											class="capture-button group"
+											aria-label="Capture photo"
+										>
+											<div class="capture-outer">
+												<div class="capture-inner group-hover:scale-95 transition-transform duration-150"></div>
+											</div>
+										</button>
+
+										<!-- Flip Camera Button -->
+										<button
+											on:click={switchCamera}
+											class="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md hover:bg-white/30 transition-all duration-300 flex items-center justify-center group"
+											aria-label="Flip camera"
+										>
+											<svg class="w-6 h-6 text-white group-hover:rotate-180 transition-transform duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+											</svg>
+										</button>
+									</div>
 								</div>
 								
 								<!-- Flip animation overlay -->
@@ -519,5 +531,52 @@
 		to {
 			transform: rotate(360deg);
 		}
+	}
+
+	/* Camera Capture Button Styles */
+	.capture-button {
+		position: relative;
+		width: 80px;
+		height: 80px;
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		padding: 0;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	.capture-outer {
+		width: 80px;
+		height: 80px;
+		border-radius: 50%;
+		border: 5px solid rgba(255, 255, 255, 0.9);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.15s ease;
+		background: transparent;
+		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+	}
+
+	.capture-inner {
+		width: 60px;
+		height: 60px;
+		border-radius: 50%;
+		background: white;
+		transition: all 0.15s ease;
+	}
+
+	.capture-button:hover .capture-outer {
+		border-color: rgba(255, 255, 255, 1);
+		transform: scale(1.05);
+	}
+
+	.capture-button:active .capture-outer {
+		transform: scale(0.95);
+	}
+
+	.capture-button:active .capture-inner {
+		transform: scale(0.85);
+		background: rgba(255, 255, 255, 0.9);
 	}
 </style>
