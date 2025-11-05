@@ -120,13 +120,17 @@ onAuthStateChanged(auth, async (user) => {
 		return '🗑️';
 	}
 
-	function getWasteColor(category: string) {
-		const lower = category.toLowerCase();
-		if (lower.includes('recyclable')) return 'blue';
-		if (lower.includes('biodegradable')) return 'green';
-		if (lower.includes('non-biodegradable')) return 'red';
-		return 'gray';
-	}
+function getWasteColor(category: string) {
+	const lower = category.toLowerCase();
+
+	// ✅ Check for "non-biodegradable" first
+	if (lower.includes('non-biodegradable')) return 'red';
+	if (lower.includes('recyclable')) return 'blue';
+	if (lower.includes('biodegradable')) return 'green';
+
+	return 'gray';
+}
+
 
 
 
