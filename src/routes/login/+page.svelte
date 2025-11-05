@@ -11,6 +11,7 @@
   } from 'firebase/auth';
   import { auth, googleProvider, db } from '$lib/firebase'; // ✅ use shared instance
   import { goto } from '$app/navigation';
+  import { signInWithRedirect, getRedirectResult } from "firebase/auth";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBXmGMVzWmatGLTFOskyngyOi1fRVnyDrg",
@@ -82,11 +83,9 @@ async function handleGoogleSignIn() {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
 
-    // Reference to Firestore user document
     const userRef = doc(db, 'users', user.uid);
     const userSnap = await getDoc(userRef);
 
-    // If user doesn't exist yet, create it
     if (!userSnap.exists()) {
       await setDoc(userRef, {
         uid: user.uid,
@@ -98,8 +97,8 @@ async function handleGoogleSignIn() {
       });
     }
 
-    // ✅ Redirect to dashboard
-    window.location.href = '/';
+    // ✅ Use SvelteKit navigation (no full reload)
+    await goto('/');
   } catch (err: unknown) {
     if (err instanceof Error) error = err.message;
     else error = String(err);
@@ -107,6 +106,7 @@ async function handleGoogleSignIn() {
     loading = false;
   }
 }
+
 
 
   async function handleSignOut() {

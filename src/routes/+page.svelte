@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { Chart, registerables } from 'chart.js';
 	import { db } from '$lib/firebase';
 	import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
@@ -8,7 +8,7 @@
 	Chart.register(...registerables);
 
 	type ClassificationData = {
-		wasteType: string;
+		wasteType: string;	
 		confidence: string;
 		timestamp: any;
 		imageSrc: string;
@@ -21,70 +21,73 @@
 	let recentActivity: any[] = [];
 	let loading = true;
 	let userUid: string | null = null;
-
+	let chartInitialized = false;
 	let chartElement: HTMLCanvasElement;
 	let lineChartElement: HTMLCanvasElement;
 	let pieChart: Chart | null = null;
 	let lineChart: Chart | null = null;
+	let user: any = null;
+
+
 
 onMount(() => {
 	const auth = getAuth();
-	onAuthStateChanged(auth, async (user) => {
-		if (user) {
-			userUid = user.uid;
-			await loadDashboardData(); // only load user-specific data
-			loading = false;
-			setTimeout(() => createCharts(), 100);
-		} else {
-			console.warn('No user logged in.');
-			loading = false;
-		}
-	});
+onAuthStateChanged(auth, async (user) => {
+	if (user) {
+		userUid = user.uid;
+		await loadDashboardData();
+		loading = false;
+	} else {
+		console.warn('No user logged in.');
+		loading = false;
+	}
+});
+
 });
 
 
-async function loadDashboardData() {
-	try {
-		if (!userUid) return;	
 
-		// only get data for this user's uid
-		const q = query(
-			collection(db, 'classified_waste'),
-			where('userId', '==', userUid),
-			orderBy('timestamp', 'asc')
-		);
+	async function loadDashboardData() {
+		try {
+			if (!userUid) return;
 
-		const querySnapshot = await getDocs(q);
+			const q = query(
+				collection(db, 'classified_waste'),
+				where('userId', '==', userUid),
+				orderBy('timestamp', 'asc')
+			);
 
-		const allData: ClassificationData[] = [];
-		recyclableCount = 0;
-		biodegradableCount = 0;
-		nonBiodegradableCount = 0;
+			const querySnapshot = await getDocs(q);
 
-		querySnapshot.forEach((doc) => {
-			const data = doc.data() as ClassificationData;
-			allData.push(data);
+			const allData: ClassificationData[] = [];
+			recyclableCount = 0;
+			biodegradableCount = 0;
+			nonBiodegradableCount = 0;
 
-			const wasteType = data.wasteType.toLowerCase();
-			if (wasteType.includes('recyclable')) recyclableCount++;
-			else if (wasteType.includes('non-biodegradable')) nonBiodegradableCount++; // ✅ Check this FIRST
-			else if (wasteType.includes('biodegradable')) biodegradableCount++;
-		});
+			querySnapshot.forEach((doc) => {
+				const data = doc.data() as ClassificationData;
+				allData.push(data);
 
-		totalDetections = allData.length;
+				const wasteType = data.wasteType.toLowerCase();
+				if (wasteType.includes('recyclable')) recyclableCount++;
+				else if (wasteType.includes('non-biodegradable')) nonBiodegradableCount++;
+				else if (wasteType.includes('biodegradable')) biodegradableCount++;
+			});
 
-		recentActivity = allData.slice(0, 5).map((item) => ({
-			type: item.wasteType,
-			time: getTimeAgo(item.timestamp?.toDate()),
-			icon: getWasteIcon(item.wasteType),
-			color: getWasteColor(item.wasteType)
-		}));
+			totalDetections = allData.length;
 
-		console.log(`✅ Dashboard data loaded for user: ${userUid}`);
-	} catch (error) {
-		console.error('❌ Error loading dashboard data:', error);
+			recentActivity = allData.slice(0, 5).map((item) => ({
+				type: item.wasteType,
+				time: getTimeAgo(item.timestamp?.toDate()),
+				icon: getWasteIcon(item.wasteType),
+				color: getWasteColor(item.wasteType)
+			}));
+
+			console.log(`✅ Dashboard data loaded for user: ${userUid}`);
+		} catch (error) {
+			console.error('❌ Error loading dashboard data:', error);
+		}
 	}
-}
 
 
 	function getTimeAgo(date: Date): string {
@@ -125,10 +128,30 @@ async function loadDashboardData() {
 		return 'gray';
 	}
 
-async function createCharts() {
-	// Pie Chart
-	const pieCtx = chartElement.getContext('2d');
-	if (pieCtx) {
+
+
+	async function createCharts() {
+		// ✅ Double-check elements exist before drawing
+		if (!chartElement || !lineChartElement) {
+			console.warn('⏳ Waiting for chart elements...');
+			await tick();
+		}
+
+		if (!chartElement || !lineChartElement) {
+			console.error('❌ Chart elements not found even after tick()');
+			return;
+		}
+
+		// Pie Chart
+		const pieCtx = chartElement.getContext('2d');
+		if (!pieCtx) {
+			console.error('❌ Could not get context for pie chart');
+			return;
+		}
+
+		// Destroy existing chart to prevent duplication
+		if (pieChart) pieChart.destroy();
+
 		pieChart = new Chart(pieCtx, {
 			type: 'doughnut',
 			data: {
@@ -141,11 +164,6 @@ async function createCharts() {
 							'rgba(34, 197, 94, 0.8)',
 							'rgba(239, 68, 68, 0.8)'
 						],
-						borderColor: [
-							'rgba(59, 130, 246, 1)',
-							'rgba(34, 197, 94, 1)',
-							'rgba(239, 68, 68, 1)'
-						],
 						borderWidth: 2
 					}
 				]
@@ -154,36 +172,22 @@ async function createCharts() {
 				responsive: true,
 				maintainAspectRatio: false,
 				plugins: {
-					legend: {
-						position: 'bottom',
-						labels: {
-							color: '#e2e8f0',
-							font: { size: 14 },
-							padding: 20
-						}
-					},
-					title: {
-						display: true,
-						text: 'Waste Distribution',
-						color: '#f1f5f9',
-						font: { size: 18, weight: 'bold' },
-						padding: { top: 10, bottom: 20 }
-					}
+					legend: { position: 'bottom' },
+					title: { display: true, text: 'Waste Distribution' }
 				}
 			}
 		});
-	}
 
-	// Line Chart - Get data grouped by date
-	const groupedData = await getGroupedByDate();
-	
-	console.log('📊 Chart Data:', groupedData); // ✅ ADD THIS DEBUG LINE
-	console.log('📊 Dates:', groupedData.dates);
-	console.log('📊 Biodegradable:', groupedData.biodegradable);
-	console.log('📊 Non-Biodegradable:', groupedData.nonBiodegradable);
-	
-	const lineCtx = lineChartElement.getContext('2d');
-	if (lineCtx) {
+		// Line Chart
+		const groupedData = await getGroupedByDate();
+		const lineCtx = lineChartElement.getContext('2d');
+		if (!lineCtx) {
+			console.error('❌ Could not get context for line chart');
+			return;
+		}
+
+		if (lineChart) lineChart.destroy();
+
 		lineChart = new Chart(lineCtx, {
 			type: 'line',
 			data: {
@@ -215,41 +219,9 @@ async function createCharts() {
 					}
 				]
 			},
-			options: {
-				responsive: true,
-				maintainAspectRatio: false,
-				plugins: {
-					legend: {
-						position: 'bottom',
-						labels: {
-							color: '#e2e8f0',
-							font: { size: 14 },
-							padding: 20
-						}
-					},
-					title: {
-						display: true,
-						text: 'Detections Over Time',
-						color: '#f1f5f9',
-						font: { size: 18, weight: 'bold' },
-						padding: { top: 10, bottom: 20 }
-					}
-				},
-				scales: {
-					y: {
-						beginAtZero: true,
-						grid: { color: 'rgba(148, 163, 184, 0.1)' },
-						ticks: { color: '#cbd5e1' }
-					},
-					x: {
-						grid: { color: 'rgba(148, 163, 184, 0.1)' },
-						ticks: { color: '#cbd5e1' }
-					}
-				}
-			}
+			options: { responsive: true, maintainAspectRatio: false }
 		});
 	}
-}
 
 async function getGroupedByDate() {
 	try {
@@ -295,6 +267,47 @@ else if (wasteType.includes('biodegradable')) dataByDate[date].biodegradable++;
 	function getPercentage(count: number): string {
 		return totalDetections > 0 ? ((count / totalDetections) * 100).toFixed(1) : '0';
 	}
+
+		// ✅ Wait until loading finishes and DOM (charts) are rendered
+	$: if (!loading && userUid && !chartInitialized) {
+		console.log("✅ DOM ready — initializing charts");
+		chartInitialized = true;
+		tick().then(() => createCharts());
+	}
+
+
+	// NEW: fetch aggregate counts for all users (global totals)
+async function fetchGlobalCounts() {
+	try {
+		// query whole collection (no user filter) and aggregate
+		const q = query(collection(db, 'classified_waste'), orderBy('timestamp', 'asc'));
+		const snap = await getDocs(q);
+
+		// reset
+		let globalRecyclable = 0;
+		let globalBiodegradable = 0;
+		let globalNonBiodegradable = 0;
+		let total = 0;
+
+		snap.forEach(doc => {
+			const data = doc.data();
+			const t = (data.wasteType || '').toLowerCase();
+			if (t.includes('recyclable')) globalRecyclable++;
+			else if (t.includes('non-biodegradable')) globalNonBiodegradable++;
+			else if (t.includes('biodegradable')) globalBiodegradable++;
+			total++;
+		});
+
+		// replace the dashboard counts with global numbers when logged out
+		// We'll keep local variables but overwrite them when not logged in
+		totalDetections = total;
+		recyclableCount = globalRecyclable;
+		biodegradableCount = globalBiodegradable;
+		nonBiodegradableCount = globalNonBiodegradable;
+	} catch (err) {
+		console.error('Error fetching global counts', err);
+	}
+}
 </script>
 
 <div class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 py-12 px-4">
