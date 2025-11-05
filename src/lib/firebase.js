@@ -1,5 +1,6 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBXmGMVzWmatGLTFOskyngyOi1fRVnyDrg",
@@ -11,5 +12,10 @@ const firebaseConfig = {
   measurementId: "G-F8ETH255B9"
 };
 
-const app = initializeApp(firebaseConfig);
+// ✅ Prevent duplicate initialization
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+
+// Export reusable Firebase instances
 export const db = getFirestore(app);
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();

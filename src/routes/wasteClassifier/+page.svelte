@@ -1,9 +1,10 @@
 <script lang="ts">
 	import * as tmImage from '@teachablemachine/image';
 	import { onMount } from 'svelte';
+	import { db, auth } from '$lib/firebase';
 	import { writable } from 'svelte/store';
-	import { db } from '$lib/firebase';
 	import { collection, addDoc, Timestamp } from 'firebase/firestore';
+	import { onAuthStateChanged } from 'firebase/auth';
 
 	let model: any;
 	let prediction = '';
@@ -20,11 +21,13 @@
 	const modelURL = '/waste-model/model.json';
 	const metadataURL = '/waste-model/metadata.json';
 
+	let currentUser: any = null; // store the logged-in user
+
 	// Animation state
 	let showResult = false;
 
-	// Camera selection state
-	let currentFacingMode: 'user' | 'environment' = 'user'; // 'user' = front, 'environment' = back
+	// Camera selection
+	let currentFacingMode: 'user' | 'environment' = 'user';
 	let isMobileDevice = false;
 
 	// Double tap detection
@@ -33,10 +36,18 @@
 	let showFlipAnimation = false;
 
 	onMount(async () => {
-		// Detect if device is mobile
+		// Watch authentication state
+		onAuthStateChanged(auth, (user) => {
+			currentUser = user;
+			if (user) {
+				console.log('👤 Logged in as:', user.email);
+			} else {
+				console.log('🚫 No user logged in');
+			}
+		});
+
+		// Detect device type
 		isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-		
-		// Set default camera based on device type
 		currentFacingMode = isMobileDevice ? 'environment' : 'user';
 		
 		try {
@@ -51,37 +62,22 @@
 
 	async function openCamera() {
 		try {
-			// Clear any previous state first
 			imagePreview = null;
 			prediction = '';
 			showResult = false;
-			
-			// Request camera with facing mode
+
 			stream = await navigator.mediaDevices.getUserMedia({ 
-				video: { 
-					facingMode: currentFacingMode,
-					width: { ideal: 1280 },
-					height: { ideal: 720 }
-				} 
+				video: { facingMode: currentFacingMode, width: { ideal: 1280 }, height: { ideal: 720 } } 
 			});
 			
-			// Set active state before setting up video
 			cameraActive = true;
-			
-			// Wait for next tick to ensure DOM is updated
 			await new Promise(resolve => setTimeout(resolve, 100));
 			
 			if (videoElement) {
 				videoElement.srcObject = stream;
-				
-				// Wait for video metadata to load
-				await new Promise((resolve) => {
-					videoElement!.onloadedmetadata = () => {
-						resolve(true);
-					};
+				await new Promise(resolve => {
+					videoElement!.onloadedmetadata = () => resolve(true);
 				});
-				
-				// Now play the video
 				await videoElement.play();
 				console.log('🎥 Camera opened successfully');
 			}
@@ -93,48 +89,26 @@
 	}
 
 	async function switchCamera() {
-		// Show flip animation
 		showFlipAnimation = true;
-		
-		// Toggle between front and back camera
 		currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
-		
-		// Close current camera
 		closeCamera();
-		
-		// Wait a bit for animation
 		await new Promise(resolve => setTimeout(resolve, 200));
-		
-		// Reopen with new facing mode
 		await openCamera();
-		
-		// Hide flip animation
-		setTimeout(() => {
-			showFlipAnimation = false;
-		}, 600);
+		setTimeout(() => (showFlipAnimation = false), 600);
 	}
 
 	function handleVideoTap(event: MouseEvent | TouchEvent) {
 		const currentTime = new Date().getTime();
 		const tapInterval = currentTime - lastTapTime;
 
-		// Clear any existing timeout
-		if (tapTimeout) {
-			clearTimeout(tapTimeout);
-		}
+		if (tapTimeout) clearTimeout(tapTimeout);
 
-		// If tapped within 300ms, it's a double tap
 		if (tapInterval < 300 && tapInterval > 0) {
-			// Double tap detected!
 			switchCamera();
-			lastTapTime = 0; // Reset to prevent triple tap
+			lastTapTime = 0;
 		} else {
-			// Single tap - wait to see if there's another tap
 			lastTapTime = currentTime;
-			tapTimeout = setTimeout(() => {
-				// Single tap action (optional - you can add single tap behavior here)
-				lastTapTime = 0;
-			}, 300);
+			tapTimeout = setTimeout(() => (lastTapTime = 0), 300);
 		}
 	}
 
@@ -149,16 +123,13 @@
 		context.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
 
 		imagePreview = canvasElement.toDataURL('image/png');
-
-		// Stop the camera
 		closeCamera();
-
 		await predictImage(imagePreview);
 	}
 
 	function closeCamera() {
 		if (stream) {
-			stream.getTracks().forEach((track) => track.stop());
+			stream.getTracks().forEach(track => track.stop());
 			stream = null;
 		}
 		cameraActive = false;
@@ -172,6 +143,7 @@
 
 		loading = true;
 		showResult = false;
+
 		const img = new Image();
 		img.src = imageSrc;
 		img.onload = async () => {
@@ -179,44 +151,45 @@
 			type Prediction = { className: string; probability: number };
 
 			const bestPrediction = (predictions as Prediction[]).reduce(
-				(a: Prediction, b: Prediction) => (a.probability > b.probability ? a : b)
+				(a, b) => (a.probability > b.probability ? a : b)
 			);
 
 			prediction = bestPrediction.className;
 			confidence = (bestPrediction.probability * 100).toFixed(2) + '%';
 			loading = false;
-			
-			// Trigger result animation
-			setTimeout(() => {
-				showResult = true;
-			}, 100);
 
-			// Save to Firebase
+			setTimeout(() => (showResult = true), 100);
+
 			await saveToFirestore(imageSrc, prediction, confidence);
 		};
 	}
 
 	async function saveToFirestore(imageSrc: string, wasteType: string, confidence: string) {
 		try {
-			// Compress the image to a smaller size
+			if (!currentUser) {
+				alert('You must be logged in to save data.');
+				console.warn('❌ Attempted to save without user');
+				return;
+			}
+
 			const compressedImage = await compressImage(imageSrc, 400, 0.7);
-			
-			// Save to Firestore with compressed image
+
 			await addDoc(collection(db, 'classified_waste'), {
+				userId: currentUser.uid, // 🔥 Save user ID
+				email: currentUser.email,
 				imageSrc: compressedImage,
 				wasteType,
 				confidence,
 				timestamp: Timestamp.now()
 			});
-			
-			console.log('✅ Classification saved to Firestore');
+
+			console.log('✅ Classification saved for user:', currentUser.email);
 		} catch (error) {
 			console.error('❌ Error saving classification:', error);
-			alert('Failed to save classification. The image might be too large.');
+			alert('Failed to save classification.');
 		}
 	}
 
-	// Function to compress image
 	async function compressImage(base64: string, maxWidth: number, quality: number): Promise<string> {
 		return new Promise((resolve) => {
 			const img = new Image();
@@ -226,7 +199,6 @@
 				let width = img.width;
 				let height = img.height;
 
-				// Calculate new dimensions while maintaining aspect ratio
 				if (width > maxWidth) {
 					height = (height * maxWidth) / width;
 					width = maxWidth;
@@ -238,7 +210,6 @@
 				const ctx = canvas.getContext('2d');
 				if (ctx) {
 					ctx.drawImage(img, 0, 0, width, height);
-					// Compress as JPEG with specified quality
 					const compressed = canvas.toDataURL('image/jpeg', quality);
 					resolve(compressed);
 				}
@@ -285,6 +256,7 @@
 		closeCamera();
 	}
 </script>
+
 
 <div class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 py-12 px-4">
 	<div class="max-w-4xl mx-auto">

@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { db } from '$lib/firebase';
-	import { collection, getDocs, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
+	import { db, auth } from '$lib/firebase';
+	import { collection, getDocs, query, where, orderBy, deleteDoc, doc } from 'firebase/firestore';
+	import { onAuthStateChanged } from 'firebase/auth';
 
 	type HistoryItem = {
 		id: string;
@@ -19,6 +20,7 @@
 	let showDeleteModal = false;
 	let itemToDelete: string | null = null;
 	let viewMode: 'grid' | 'list' = 'grid';
+	let userID: string | null = null;
 
 	const filters = [
 		{ value: 'all', label: 'All Items', icon: '🗂️' },
@@ -27,14 +29,29 @@
 		{ value: 'non-biodegradable', label: 'Non-Biodegradable', icon: '🚯' }
 	];
 
-	onMount(async () => {
-		await loadHistoryFromFirestore();
-		loading = false;
+	onMount(() => {
+		onAuthStateChanged(auth, async (user) => {
+			if (user) {
+				userID = user.uid;
+				await loadHistoryFromFirestore();
+			} else {
+				console.warn('⚠️ No user logged in — redirecting to login...');
+				window.location.href = '/login';
+			}
+			loading = false;
+		});
 	});
 
 	async function loadHistoryFromFirestore() {
 		try {
-			const q = query(collection(db, 'classified_waste'), orderBy('timestamp', 'desc'));
+			if (!userID) return;
+
+const q = query(
+  collection(db, 'classified_waste'),
+  where('userId', '==', userID),
+  orderBy('timestamp', 'desc')
+);
+
 			const querySnapshot = await getDocs(q);
 			history = querySnapshot.docs.map((docSnap) => {
 				const data = docSnap.data();
@@ -48,22 +65,34 @@
 				};
 			});
 			filteredHistory = history;
-			console.log('✅ History loaded from Firestore:', history);
+			console.log('✅ History loaded for current user:', userID, history);
 		} catch (error) {
 			console.error('❌ Error loading history:', error);
 		}
 	}
 
-	function filterHistory(filterValue: string) {
-		selectedFilter = filterValue;
-		if (filterValue === 'all') {
-			filteredHistory = history;
-		} else {
-			filteredHistory = history.filter((item) =>
-				item.prediction.toLowerCase().includes(filterValue.toLowerCase())
-			);
-		}
-	}
+function filterHistory(filterValue: string) {
+    selectedFilter = filterValue;
+    if (filterValue === 'all') {
+        filteredHistory = history;
+    } else if (filterValue === 'non-biodegradable') {
+        // Must check for exact "non-biodegradable" match
+        filteredHistory = history.filter((item) =>
+            item.prediction.toLowerCase().includes('non-biodegradable')
+        );
+    } else if (filterValue === 'biodegradable') {
+        // Only match "biodegradable" but NOT "non-biodegradable"
+        filteredHistory = history.filter((item) => {
+            const pred = item.prediction.toLowerCase();
+            return pred.includes('biodegradable') && !pred.includes('non-biodegradable');
+        });
+    } else {
+        // For recyclable or any other filter
+        filteredHistory = history.filter((item) =>
+            item.prediction.toLowerCase().includes(filterValue.toLowerCase())
+        );
+    }
+}
 
 	function confirmDelete(id: string) {
 		itemToDelete = id;
@@ -72,7 +101,6 @@
 
 	async function deleteItem() {
 		if (!itemToDelete) return;
-		
 		try {
 			await deleteDoc(doc(db, 'classified_waste', itemToDelete));
 			history = history.filter((item) => item.id !== itemToDelete);
@@ -90,11 +118,8 @@
 		if (!confirm('Are you sure you want to delete ALL classification history? This cannot be undone.')) {
 			return;
 		}
-
 		try {
-			const deletePromises = history.map((item) => 
-				deleteDoc(doc(db, 'classified_waste', item.id))
-			);
+			const deletePromises = history.map((item) => deleteDoc(doc(db, 'classified_waste', item.id)));
 			await Promise.all(deletePromises);
 			history = [];
 			filteredHistory = [];
@@ -113,14 +138,6 @@
 		return '🗑️';
 	}
 
-	function getWasteColor(category: string) {
-		const lower = category.toLowerCase();
-		if (lower.includes('recyclable')) return 'blue';
-		if (lower.includes('biodegradable')) return 'green';
-		if (lower.includes('non-biodegradable')) return 'red';
-		return 'gray';
-	}
-
 	function getBadgeClass(category: string) {
 		const lower = category.toLowerCase();
 		if (lower.includes('recyclable')) return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
@@ -129,6 +146,7 @@
 		return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
 	}
 </script>
+
 
 <div class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 py-12 px-4">
 	<div class="max-w-7xl mx-auto">
@@ -167,25 +185,32 @@
 					<!-- Filters -->
 					<div class="flex flex-wrap gap-2">
 						{#each filters as filter}
-							<button
-								onclick={() => filterHistory(filter.value)}
-								class="px-6 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center gap-2
-									{selectedFilter === filter.value
-										? 'bg-gradient-to-r from-purple-500/30 to-pink-500/30 text-purple-300 border-2 border-purple-500/50'
-										: 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 border-2 border-transparent'}"
-							>
-								<span class="text-xl">{filter.icon}</span>
-								<span>{filter.label}</span>
-								{#if filter.value === 'all'}
-									<span class="bg-slate-600 text-white px-2 py-0.5 rounded-full text-xs">
-										{history.length}
-									</span>
-								{:else}
-									<span class="bg-slate-600 text-white px-2 py-0.5 rounded-full text-xs">
-										{history.filter(item => item.prediction.toLowerCase().includes(filter.value.toLowerCase())).length}
-									</span>
-								{/if}
-							</button>
+<button
+    onclick={() => filterHistory(filter.value)}
+    class="px-6 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center gap-2
+        {selectedFilter === filter.value
+            ? 'bg-gradient-to-r from-purple-500/30 to-pink-500/30 text-purple-300 border-2 border-purple-500/50'
+            : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 border-2 border-transparent'}"
+>
+    <span class="text-xl">{filter.icon}</span>
+    <span>{filter.label}</span>
+    {#if filter.value === 'all'}
+        <span class="bg-slate-600 text-white px-2 py-0.5 rounded-full text-xs">
+            {history.length}
+        </span>
+    {:else if filter.value === 'biodegradable'}
+        <span class="bg-slate-600 text-white px-2 py-0.5 rounded-full text-xs">
+            {history.filter(item => {
+                const pred = item.prediction.toLowerCase();
+                return pred.includes('biodegradable') && !pred.includes('non-biodegradable');
+            }).length}
+        </span>
+    {:else}
+        <span class="bg-slate-600 text-white px-2 py-0.5 rounded-full text-xs">
+            {history.filter(item => item.prediction.toLowerCase().includes(filter.value.toLowerCase())).length}
+        </span>
+    {/if}
+</button>
 						{/each}
 					</div>
 

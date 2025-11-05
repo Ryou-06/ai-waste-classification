@@ -2,7 +2,8 @@
 	import { onMount } from 'svelte';
 	import { Chart, registerables } from 'chart.js';
 	import { db } from '$lib/firebase';
-	import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+	import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
+	import { getAuth, onAuthStateChanged } from 'firebase/auth';
 
 	Chart.register(...registerables);
 
@@ -19,56 +20,72 @@
 	let nonBiodegradableCount = 0;
 	let recentActivity: any[] = [];
 	let loading = true;
+	let userUid: string | null = null;
 
 	let chartElement: HTMLCanvasElement;
 	let lineChartElement: HTMLCanvasElement;
 	let pieChart: Chart | null = null;
 	let lineChart: Chart | null = null;
 
-	onMount(async () => {
-		await loadDashboardData();
-		loading = false;
-		// Wait for DOM to update before creating charts
-		setTimeout(() => {
-			createCharts();
-		}, 100);
-	});
-
-	async function loadDashboardData() {
-		try {
-			const q = query(collection(db, 'classified_waste'), orderBy('timestamp', 'desc'));
-			const querySnapshot = await getDocs(q);
-			
-			const allData: ClassificationData[] = [];
-			recyclableCount = 0;
-			biodegradableCount = 0;
-			nonBiodegradableCount = 0;
-
-			querySnapshot.forEach((doc) => {
-				const data = doc.data() as ClassificationData;
-				allData.push(data);
-
-				const wasteType = data.wasteType.toLowerCase();
-				if (wasteType.includes('recyclable')) recyclableCount++;
-				else if (wasteType.includes('biodegradable')) biodegradableCount++;
-				else if (wasteType.includes('non-biodegradable')) nonBiodegradableCount++;
-			});
-
-			totalDetections = allData.length;
-
-			// Get recent 5 activities
-			recentActivity = allData.slice(0, 5).map((item) => ({
-				type: item.wasteType,
-				time: getTimeAgo(item.timestamp?.toDate()),
-				icon: getWasteIcon(item.wasteType),
-				color: getWasteColor(item.wasteType)
-			}));
-
-			console.log('✅ Dashboard data loaded from Firestore');
-		} catch (error) {
-			console.error('❌ Error loading dashboard data:', error);
+onMount(() => {
+	const auth = getAuth();
+	onAuthStateChanged(auth, async (user) => {
+		if (user) {
+			userUid = user.uid;
+			await loadDashboardData(); // only load user-specific data
+			loading = false;
+			setTimeout(() => createCharts(), 100);
+		} else {
+			console.warn('No user logged in.');
+			loading = false;
 		}
+	});
+});
+
+
+async function loadDashboardData() {
+	try {
+		if (!userUid) return;	
+
+		// only get data for this user's uid
+		const q = query(
+			collection(db, 'classified_waste'),
+			where('userId', '==', userUid),
+			orderBy('timestamp', 'asc')
+		);
+
+		const querySnapshot = await getDocs(q);
+
+		const allData: ClassificationData[] = [];
+		recyclableCount = 0;
+		biodegradableCount = 0;
+		nonBiodegradableCount = 0;
+
+		querySnapshot.forEach((doc) => {
+			const data = doc.data() as ClassificationData;
+			allData.push(data);
+
+			const wasteType = data.wasteType.toLowerCase();
+			if (wasteType.includes('recyclable')) recyclableCount++;
+			else if (wasteType.includes('non-biodegradable')) nonBiodegradableCount++; // ✅ Check this FIRST
+			else if (wasteType.includes('biodegradable')) biodegradableCount++;
+		});
+
+		totalDetections = allData.length;
+
+		recentActivity = allData.slice(0, 5).map((item) => ({
+			type: item.wasteType,
+			time: getTimeAgo(item.timestamp?.toDate()),
+			icon: getWasteIcon(item.wasteType),
+			color: getWasteColor(item.wasteType)
+		}));
+
+		console.log(`✅ Dashboard data loaded for user: ${userUid}`);
+	} catch (error) {
+		console.error('❌ Error loading dashboard data:', error);
 	}
+}
+
 
 	function getTimeAgo(date: Date): string {
 		if (!date) return 'Unknown';
@@ -108,160 +125,172 @@
 		return 'gray';
 	}
 
-	async function createCharts() {
-		// Pie Chart
-		const pieCtx = chartElement.getContext('2d');
-		if (pieCtx) {
-			pieChart = new Chart(pieCtx, {
-				type: 'doughnut',
-				data: {
-					labels: ['Recyclable', 'Biodegradable', 'Non-Biodegradable'],
-					datasets: [
-						{
-							data: [recyclableCount, biodegradableCount, nonBiodegradableCount],
-							backgroundColor: [
-								'rgba(59, 130, 246, 0.8)',
-								'rgba(34, 197, 94, 0.8)',
-								'rgba(239, 68, 68, 0.8)'
-							],
-							borderColor: [
-								'rgba(59, 130, 246, 1)',
-								'rgba(34, 197, 94, 1)',
-								'rgba(239, 68, 68, 1)'
-							],
-							borderWidth: 2
-						}
-					]
-				},
-				options: {
-					responsive: true,
-					maintainAspectRatio: false,
-					plugins: {
-						legend: {
-							position: 'bottom',
-							labels: {
-								color: '#e2e8f0',
-								font: { size: 14 },
-								padding: 20
-							}
-						},
-						title: {
-							display: true,
-							text: 'Waste Distribution',
-							color: '#f1f5f9',
-							font: { size: 18, weight: 'bold' },
-							padding: { top: 10, bottom: 20 }
-						}
+async function createCharts() {
+	// Pie Chart
+	const pieCtx = chartElement.getContext('2d');
+	if (pieCtx) {
+		pieChart = new Chart(pieCtx, {
+			type: 'doughnut',
+			data: {
+				labels: ['Recyclable', 'Biodegradable', 'Non-Biodegradable'],
+				datasets: [
+					{
+						data: [recyclableCount, biodegradableCount, nonBiodegradableCount],
+						backgroundColor: [
+							'rgba(59, 130, 246, 0.8)',
+							'rgba(34, 197, 94, 0.8)',
+							'rgba(239, 68, 68, 0.8)'
+						],
+						borderColor: [
+							'rgba(59, 130, 246, 1)',
+							'rgba(34, 197, 94, 1)',
+							'rgba(239, 68, 68, 1)'
+						],
+						borderWidth: 2
 					}
-				}
-			});
-		}
-
-		// Line Chart - Get data grouped by date
-		const groupedData = await getGroupedByDate();
-		
-		const lineCtx = lineChartElement.getContext('2d');
-		if (lineCtx) {
-			lineChart = new Chart(lineCtx, {
-				type: 'line',
-				data: {
-					labels: groupedData.dates,
-					datasets: [
-						{
-							label: 'Recyclable',
-							data: groupedData.recyclable,
-							borderColor: 'rgba(59, 130, 246, 1)',
-							backgroundColor: 'rgba(59, 130, 246, 0.1)',
-							tension: 0.4,
-							fill: true
-						},
-						{
-							label: 'Biodegradable',
-							data: groupedData.biodegradable,
-							borderColor: 'rgba(34, 197, 94, 1)',
-							backgroundColor: 'rgba(34, 197, 94, 0.1)',
-							tension: 0.4,
-							fill: true
-						},
-						{
-							label: 'Non-Biodegradable',
-							data: groupedData.nonBiodegradable,
-							borderColor: 'rgba(239, 68, 68, 1)',
-							backgroundColor: 'rgba(239, 68, 68, 0.1)',
-							tension: 0.4,
-							fill: true
-						}
-					]
-				},
-				options: {
-					responsive: true,
-					maintainAspectRatio: false,
-					plugins: {
-						legend: {
-							position: 'bottom',
-							labels: {
-								color: '#e2e8f0',
-								font: { size: 14 },
-								padding: 20
-							}
-						},
-						title: {
-							display: true,
-							text: 'Detections Over Time',
-							color: '#f1f5f9',
-							font: { size: 18, weight: 'bold' },
-							padding: { top: 10, bottom: 20 }
+				]
+			},
+			options: {
+				responsive: true,
+				maintainAspectRatio: false,
+				plugins: {
+					legend: {
+						position: 'bottom',
+						labels: {
+							color: '#e2e8f0',
+							font: { size: 14 },
+							padding: 20
 						}
 					},
-					scales: {
-						y: {
-							beginAtZero: true,
-							grid: { color: 'rgba(148, 163, 184, 0.1)' },
-							ticks: { color: '#cbd5e1' }
-						},
-						x: {
-							grid: { color: 'rgba(148, 163, 184, 0.1)' },
-							ticks: { color: '#cbd5e1' }
-						}
+					title: {
+						display: true,
+						text: 'Waste Distribution',
+						color: '#f1f5f9',
+						font: { size: 18, weight: 'bold' },
+						padding: { top: 10, bottom: 20 }
 					}
 				}
-			});
-		}
+			}
+		});
 	}
 
-	async function getGroupedByDate() {
-		try {
-			const q = query(collection(db, 'classified_waste'), orderBy('timestamp', 'asc'));
-			const querySnapshot = await getDocs(q);
-			
-			const dataByDate: Record<string, { recyclable: number; biodegradable: number; nonBiodegradable: number }> = {};
-			
-			querySnapshot.forEach((doc) => {
-				const data = doc.data();
-				const date = data.timestamp?.toDate().toLocaleDateString() || 'Unknown';
-				
-				if (!dataByDate[date]) {
-					dataByDate[date] = { recyclable: 0, biodegradable: 0, nonBiodegradable: 0 };
+	// Line Chart - Get data grouped by date
+	const groupedData = await getGroupedByDate();
+	
+	console.log('📊 Chart Data:', groupedData); // ✅ ADD THIS DEBUG LINE
+	console.log('📊 Dates:', groupedData.dates);
+	console.log('📊 Biodegradable:', groupedData.biodegradable);
+	console.log('📊 Non-Biodegradable:', groupedData.nonBiodegradable);
+	
+	const lineCtx = lineChartElement.getContext('2d');
+	if (lineCtx) {
+		lineChart = new Chart(lineCtx, {
+			type: 'line',
+			data: {
+				labels: groupedData.dates,
+				datasets: [
+					{
+						label: 'Recyclable',
+						data: groupedData.recyclable,
+						borderColor: 'rgba(59, 130, 246, 1)',
+						backgroundColor: 'rgba(59, 130, 246, 0.1)',
+						tension: 0.4,
+						fill: true
+					},
+					{
+						label: 'Biodegradable',
+						data: groupedData.biodegradable,
+						borderColor: 'rgba(34, 197, 94, 1)',
+						backgroundColor: 'rgba(34, 197, 94, 0.1)',
+						tension: 0.4,
+						fill: true
+					},
+					{
+						label: 'Non-Biodegradable',
+						data: groupedData.nonBiodegradable,
+						borderColor: 'rgba(239, 68, 68, 1)',
+						backgroundColor: 'rgba(239, 68, 68, 0.1)',
+						tension: 0.4,
+						fill: true
+					}
+				]
+			},
+			options: {
+				responsive: true,
+				maintainAspectRatio: false,
+				plugins: {
+					legend: {
+						position: 'bottom',
+						labels: {
+							color: '#e2e8f0',
+							font: { size: 14 },
+							padding: 20
+						}
+					},
+					title: {
+						display: true,
+						text: 'Detections Over Time',
+						color: '#f1f5f9',
+						font: { size: 18, weight: 'bold' },
+						padding: { top: 10, bottom: 20 }
+					}
+				},
+				scales: {
+					y: {
+						beginAtZero: true,
+						grid: { color: 'rgba(148, 163, 184, 0.1)' },
+						ticks: { color: '#cbd5e1' }
+					},
+					x: {
+						grid: { color: 'rgba(148, 163, 184, 0.1)' },
+						ticks: { color: '#cbd5e1' }
+					}
 				}
-				
-				const wasteType = data.wasteType.toLowerCase();
-				if (wasteType.includes('recyclable')) dataByDate[date].recyclable++;
-				else if (wasteType.includes('biodegradable')) dataByDate[date].biodegradable++;
-				else if (wasteType.includes('non-biodegradable')) dataByDate[date].nonBiodegradable++;
-			});
-			
-			const dates = Object.keys(dataByDate).slice(-7); // Last 7 dates
-			return {
-				dates,
-				recyclable: dates.map(d => dataByDate[d].recyclable),
-				biodegradable: dates.map(d => dataByDate[d].biodegradable),
-				nonBiodegradable: dates.map(d => dataByDate[d].nonBiodegradable)
-			};
-		} catch (error) {
-			console.error('Error grouping data:', error);
-			return { dates: [], recyclable: [], biodegradable: [], nonBiodegradable: [] };
-		}
+			}
+		});
 	}
+}
+
+async function getGroupedByDate() {
+	try {
+		if (!userUid) return { dates: [], recyclable: [], biodegradable: [], nonBiodegradable: [] };
+		
+		const q = query(
+			collection(db, 'classified_waste'),
+			where('userId', '==', userUid),
+			orderBy('timestamp', 'asc')
+		);
+
+		const querySnapshot = await getDocs(q);
+		
+		const dataByDate: Record<string, { recyclable: number; biodegradable: number; nonBiodegradable: number }> = {};
+		
+		querySnapshot.forEach((doc) => {
+			const data = doc.data();
+			const date = data.timestamp?.toDate().toLocaleDateString() || 'Unknown';
+			
+			if (!dataByDate[date]) {
+				dataByDate[date] = { recyclable: 0, biodegradable: 0, nonBiodegradable: 0 };
+			}
+			
+const wasteType = data.wasteType.toLowerCase();
+if (wasteType.includes('recyclable')) dataByDate[date].recyclable++;
+else if (wasteType.includes('non-biodegradable')) dataByDate[date].nonBiodegradable++; // ✅ Check this FIRST
+else if (wasteType.includes('biodegradable')) dataByDate[date].biodegradable++;
+		});
+		
+		const dates = Object.keys(dataByDate).slice(-7); // Last 7 dates
+		return {
+			dates,
+			recyclable: dates.map(d => dataByDate[d].recyclable),
+			biodegradable: dates.map(d => dataByDate[d].biodegradable),
+			nonBiodegradable: dates.map(d => dataByDate[d].nonBiodegradable)
+		};
+	} catch (error) {
+		console.error('Error grouping data:', error);
+		return { dates: [], recyclable: [], biodegradable: [], nonBiodegradable: [] };
+	}
+}
 
 	function getPercentage(count: number): string {
 		return totalDetections > 0 ? ((count / totalDetections) * 100).toFixed(1) : '0';
@@ -359,47 +388,62 @@
 				
 				{#if recentActivity.length > 0}
 					<div class="space-y-4">
-						{#each recentActivity as activity}
-							<div class="flex items-center gap-4 p-4 bg-slate-700/30 rounded-xl hover:bg-slate-700/50 transition-colors duration-200">
-								<div class="text-3xl">{activity.icon}</div>
-								<div class="flex-1">
-									<p class="text-white font-semibold">{activity.type}</p>
-									<p class="text-slate-400 text-sm">{activity.time}</p>
-								</div>
-								<div class="bg-{activity.color}-500/20 text-{activity.color}-400 px-4 py-2 rounded-lg text-sm font-semibold">
-									Classified
-								</div>
-							</div>
-						{/each}
+{#each recentActivity as activity}
+    <div class="flex items-center gap-4 p-4 bg-slate-700/30 rounded-xl hover:bg-slate-700/50 transition-colors duration-200">
+        <div class="text-3xl">
+            {#if activity.type === 'Biodegradable'}
+                🌱
+            {:else if activity.type === 'Non-biodegradable'}
+                🚯
+            {:else if activity.type === 'Recyclable'}
+                ♻️
+            {/if}
+        </div>
+        <div class="flex-1">
+            <p class="text-white font-semibold">{activity.type}</p>
+            <p class="text-slate-400 text-sm">{activity.time}</p>
+        </div>
+        <div class="bg-{activity.color}-500/20 text-{activity.color}-400 px-4 py-2 rounded-lg text-sm font-semibold">
+            Classified
+        </div>
+    </div>
+{/each}
+
 					</div>
 				{:else}
 					<p class="text-slate-400 text-center py-8">No recent activity</p>
 				{/if}
 			</div>
 
-			<!-- Environmental Impact Section -->
-			<div class="grid md:grid-cols-3 gap-6">
-				<div class="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-2xl p-6 backdrop-blur-sm">
-					<div class="text-5xl mb-4">🌍</div>
-					<h3 class="text-xl font-bold text-cyan-400 mb-2">CO₂ Saved</h3>
-					<p class="text-3xl font-bold text-white mb-2">{(recyclableCount * 0.5).toFixed(1)} kg</p>
-					<p class="text-slate-400 text-sm">Estimated carbon footprint reduction</p>
-				</div>
+<!-- Environmental Impact Section -->
+<div class="grid md:grid-cols-3 gap-6">
+    <div class="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-2xl p-6 backdrop-blur-sm">
+        <div class="text-5xl mb-4">🌍</div>
+        <h3 class="text-xl font-bold text-cyan-400 mb-2">CO₂ Saved</h3>
+        <p class="text-3xl font-bold text-white mb-2">
+            {((recyclableCount * 0.5) + (biodegradableCount * 0.3)).toFixed(1)} kg
+        </p>
+        <p class="text-slate-400 text-sm">Estimated carbon footprint reduction</p>
+    </div>
 
-				<div class="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-2xl p-6 backdrop-blur-sm">
-					<div class="text-5xl mb-4">💧</div>
-					<h3 class="text-xl font-bold text-green-400 mb-2">Water Saved</h3>
-					<p class="text-3xl font-bold text-white mb-2">{(recyclableCount * 15).toFixed(0)} L</p>
-					<p class="text-slate-400 text-sm">Through proper recycling practices</p>
-				</div>
+    <div class="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-2xl p-6 backdrop-blur-sm">
+        <div class="text-5xl mb-4">💧</div>
+        <h3 class="text-xl font-bold text-green-400 mb-2">Water Saved</h3>
+        <p class="text-3xl font-bold text-white mb-2">
+            {((recyclableCount * 15) + (biodegradableCount * 5)).toFixed(0)} L
+        </p>
+        <p class="text-slate-400 text-sm">Through proper recycling practices</p>
+    </div>
 
-				<div class="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-2xl p-6 backdrop-blur-sm">
-					<div class="text-5xl mb-4">⚡</div>
-					<h3 class="text-xl font-bold text-purple-400 mb-2">Energy Saved</h3>
-					<p class="text-3xl font-bold text-white mb-2">{(recyclableCount * 2.3).toFixed(1)} kWh</p>
-					<p class="text-slate-400 text-sm">Renewable energy equivalent</p>
-				</div>
-			</div>
+    <div class="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-2xl p-6 backdrop-blur-sm">
+        <div class="text-5xl mb-4">⚡</div>
+        <h3 class="text-xl font-bold text-purple-400 mb-2">Energy Saved</h3>
+        <p class="text-3xl font-bold text-white mb-2">
+            {((recyclableCount * 2.3) + (biodegradableCount * 1.5)).toFixed(1)} kWh
+        </p>
+        <p class="text-slate-400 text-sm">Renewable energy equivalent</p>
+    </div>
+</div>
 		{/if}
 	</div>
 </div>
