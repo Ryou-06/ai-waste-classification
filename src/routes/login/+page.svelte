@@ -2,30 +2,18 @@
   import { onMount } from 'svelte';
   import { doc, setDoc, getDoc } from 'firebase/firestore';
   import {
-    createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     signInWithPopup,
     signOut,
     onAuthStateChanged,
     type User
   } from 'firebase/auth';
-  import { auth, googleProvider, db } from '$lib/firebase'; // ✅ use shared instance
+  import { auth, googleProvider, db } from '$lib/firebase';
   import { goto } from '$app/navigation';
-  import { signInWithRedirect, getRedirectResult } from "firebase/auth";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyBXmGMVzWmatGLTFOskyngyOi1fRVnyDrg",
-    authDomain: "ai-classification-system.firebaseapp.com",
-    projectId: "ai-classification-system",
-    storageBucket: "ai-classification-system.appspot.com",
-    messagingSenderId: "711983308595",
-    appId: "1:711983308595:web:f9d834a983121f90a5e846"
-  };
 
   let user: User | null = null;
   let email = '';
   let password = '';
-  let isSignUp = false;
   let error = '';
   let loading = false;
 
@@ -36,78 +24,54 @@
     return () => unsubscribe();
   });
 
-async function handleEmailAuth() {
-  error = '';
-  loading = true;
+  async function handleEmailSignIn() {
+    error = '';
+    loading = true;
 
-  try {
-    if (isSignUp) {
-      // 🟢 Create new user with email and password
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      const newUser = cred.user;
-
-      // 🗃️ Save user to Firestore
-      await setDoc(doc(db, 'users', newUser.uid), {
-        uid: newUser.uid,
-        email: newUser.email,
-        displayName: newUser.displayName ?? '',
-        photoURL: newUser.photoURL ?? '',
-        createdAt: new Date().toISOString(),
-        provider: 'email'
-      });
-    } else {
-      // 🔵 Sign in existing user
+    try {
       await signInWithEmailAndPassword(auth, email, password);
+      window.location.href = '/dashboard';
+      
+      email = '';
+      password = '';
+    } catch (err: unknown) {
+      if (err instanceof Error) error = err.message;
+      else error = String(err);
+    } finally {
+      loading = false;
     }
-
-    // ✅ Redirect to dashboard
-    window.location.href = '/';
-
-    // 🧹 Reset form fields
-    email = '';
-    password = '';
-  } catch (err: unknown) {
-    if (err instanceof Error) error = err.message;
-    else error = String(err);
-  } finally {
-    loading = false;
   }
-}
 
+  async function handleGoogleSignIn() {
+    error = '';
+    loading = true;
 
-async function handleGoogleSignIn() {
-  error = '';
-  loading = true;
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
 
-  try {
-    const result = await signInWithPopup(auth, googleProvider);
-    const user = result.user;
+      const userRef = doc(db, 'users', user.uid);
+      const userSnap = await getDoc(userRef);
 
-    const userRef = doc(db, 'users', user.uid);
-    const userSnap = await getDoc(userRef);
+      if (!userSnap.exists()) {
+        await setDoc(userRef, {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+          createdAt: new Date().toISOString(),
+          provider: 'google'
+        });
+      }
 
-    if (!userSnap.exists()) {
-      await setDoc(userRef, {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        createdAt: new Date().toISOString(),
-        provider: 'google'
-      });
+      await goto('/dashboard');
+    } catch (err: unknown) {
+      if (err instanceof Error) error = err.message;
+      else error = String(err);
+    } finally {
+      loading = false;
     }
-
-    // ✅ Use SvelteKit navigation (no full reload)
-    await goto('/');
-  } catch (err: unknown) {
-    if (err instanceof Error) error = err.message;
-    else error = String(err);
-  } finally {
-    loading = false;
   }
-}
-
-
 
   async function handleSignOut() {
     try {
@@ -117,40 +81,46 @@ async function handleGoogleSignIn() {
       else error = String(err);
     }
   }
-</script>
 
+  function goToRegister() {
+    goto('/register');
+  }
+</script>
 
 <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
   <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
-{#if user}
-  <div class="text-center">
-    <div class="mb-6">
-      {#if user.photoURL}
-        <img src={user.photoURL} alt="Profile" class="w-20 h-20 rounded-full mx-auto mb-4 border-4 border-indigo-100" />
-      {:else}
-        <div class="w-20 h-20 rounded-full mx-auto mb-4 bg-indigo-500 flex items-center justify-center text-white text-2xl font-bold">
-          {user.email ? user.email[0].toUpperCase() : 'U'}
+    {#if user}
+      <!-- Logged In View -->
+      <div class="text-center">
+        <div class="mb-6">
+          {#if user.photoURL}
+            <img src={user.photoURL} alt="Profile" class="w-20 h-20 rounded-full mx-auto mb-4 border-4 border-indigo-100" />
+          {:else}
+            <div class="w-20 h-20 rounded-full mx-auto mb-4 bg-indigo-500 flex items-center justify-center text-white text-2xl font-bold">
+              {user.displayName ? user.displayName[0].toUpperCase() : (user.email ? user.email[0].toUpperCase() : 'U')}
+            </div>
+          {/if}
+          <h2 class="text-2xl font-bold text-gray-800 mb-2">
+            Welcome{user.displayName ? `, ${user.displayName}` : ''}!
+          </h2>
+          <p class="text-gray-600">{user.email ?? 'No email available'}</p>
         </div>
-      {/if}
-      <h2 class="text-2xl font-bold text-gray-800 mb-2">Welcome!</h2>
-      <p class="text-gray-600">{user.email ?? 'No email available'}</p>
-    </div>
         
-    <button 
-      on:click={handleSignOut}
-      class="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-200"
-    >
-      Sign Out
-    </button>
-  </div>
+        <button 
+          on:click={handleSignOut}
+          class="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-200"
+        >
+          Sign Out
+        </button>
+      </div>
     {:else}
-      <!-- Login/Signup View -->
+      <!-- Login View ONLY -->
       <div>
         <h2 class="text-3xl font-bold text-center text-gray-800 mb-2">
-          {isSignUp ? 'Create Account' : 'Welcome Back'}
+          Welcome Back
         </h2>
         <p class="text-center text-gray-600 mb-8">
-          {isSignUp ? 'Sign up to get started' : 'Sign in to your account'}
+          Sign in to your account
         </p>
 
         {#if error}
@@ -159,7 +129,7 @@ async function handleGoogleSignIn() {
           </div>
         {/if}
 
-        <form on:submit|preventDefault={handleEmailAuth} class="space-y-4 mb-6">
+        <form on:submit|preventDefault={handleEmailSignIn} class="space-y-4 mb-6">
           <div>
             <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
               Email
@@ -194,7 +164,7 @@ async function handleGoogleSignIn() {
             disabled={loading}
             class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-semibold py-3 px-4 rounded-lg transition duration-200"
           >
-            {loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
+            {loading ? 'Loading...' : 'Sign In'}
           </button>
         </form>
 
@@ -223,10 +193,10 @@ async function handleGoogleSignIn() {
 
         <div class="text-center mt-6">
           <button
-            on:click={() => { isSignUp = !isSignUp; error = ''; }}
+            on:click={goToRegister}
             class="text-indigo-600 hover:text-indigo-700 font-medium text-sm"
           >
-            {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+            Don't have an account? Sign up
           </button>
         </div>
       </div>
