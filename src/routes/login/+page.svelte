@@ -18,7 +18,7 @@
   let loading = false;
 
   onMount(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth!, (currentUser) => {
       user = currentUser;
     });
     return () => unsubscribe();
@@ -29,7 +29,7 @@
     loading = true;
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth!, email, password);
       window.location.href = '/dashboard';
       
       email = '';
@@ -47,10 +47,10 @@
     loading = true;
 
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth!, googleProvider!);
       const user = result.user;
 
-      const userRef = doc(db, 'users', user.uid);
+      const userRef = doc(db!, 'users', user.uid);
       const userSnap = await getDoc(userRef);
 
       if (!userSnap.exists()) {
@@ -75,7 +75,7 @@
 
   async function handleSignOut() {
     try {
-      await signOut(auth);
+      await signOut(auth!);
     } catch (err: unknown) {
       if (err instanceof Error) error = err.message;
       else error = String(err);

@@ -12,10 +12,10 @@
 	let user: any = $state(null);
 	let authInitialized = $state(false);
 
-	const auth = getAuth();
+	import { auth } from '$lib/firebase';  // ← Import from your firebase.js
 
 	onMount(() => {
-		const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+		const unsubscribe = onAuthStateChanged(auth!, (currentUser) => {
 			user = currentUser;
 			authInitialized = true;
 			console.log('Auth state changed:', currentUser ? 'Logged in' : 'Logged out');
@@ -57,7 +57,7 @@
 
 async function handleLogout() {
     try {
-        await signOut(auth);
+        await signOut(auth!);
         userMenuOpen = false;
         // Wait a bit for auth state to clear
         await new Promise(resolve => setTimeout(resolve, 100));

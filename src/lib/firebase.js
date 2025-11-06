@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { browser } from '$app/environment';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -12,10 +13,23 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-// ✅ Prevent duplicate initialization
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+// ✅ Initialize ONLY in the browser
+let app;
 
-// Export reusable Firebase instances
-export const db = getFirestore(app);
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
+/** @type {import('firebase/firestore').Firestore | undefined} */
+let db;
+
+/** @type {import('firebase/auth').Auth | undefined} */
+let auth;
+
+/** @type {import('firebase/auth').GoogleAuthProvider | undefined} */
+let googleProvider;
+
+if (browser) {
+  app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+  db = getFirestore(app);
+  auth = getAuth(app);
+  googleProvider = new GoogleAuthProvider();
+}
+
+export { db, auth, googleProvider };
