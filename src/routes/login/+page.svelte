@@ -16,41 +16,77 @@
   let password = '';
   let error = '';
   let loading = false;
+  let firebaseReady = false;
 
   onMount(() => {
-    const unsubscribe = onAuthStateChanged(auth!, (currentUser) => {
+    // Check if Firebase is initialized
+    if (!auth || !googleProvider || !db) {
+      error = 'Firebase is not initialized. Please check your configuration.';
+      console.error('Firebase initialization failed:', { auth, googleProvider, db });
+      return;
+    }
+
+    firebaseReady = true;
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       user = currentUser;
+      if (currentUser) {
+        console.log('User logged in:', currentUser.email);
+      }
     });
+
     return () => unsubscribe();
   });
 
   async function handleEmailSignIn() {
+    if (!firebaseReady || !auth) {
+      error = 'Firebase is not ready. Please refresh the page.';
+      return;
+    }
+
     error = '';
     loading = true;
 
     try {
-      await signInWithEmailAndPassword(auth!, email, password);
+      await signInWithEmailAndPassword(auth, email, password);
       window.location.href = '/dashboard';
       
       email = '';
       password = '';
-    } catch (err: unknown) {
-      if (err instanceof Error) error = err.message;
-      else error = String(err);
+    } catch (err: any) {
+      console.error('Sign in error:', err);
+      
+      // User-friendly error messages
+      if (err.code === 'auth/invalid-credential') {
+        error = 'Invalid email or password';
+      } else if (err.code === 'auth/user-not-found') {
+        error = 'No account found with this email';
+      } else if (err.code === 'auth/wrong-password') {
+        error = 'Incorrect password';
+      } else if (err.code === 'auth/too-many-requests') {
+        error = 'Too many failed attempts. Please try again later';
+      } else {
+        error = err.message || 'Failed to sign in';
+      }
     } finally {
       loading = false;
     }
   }
 
   async function handleGoogleSignIn() {
+    if (!firebaseReady || !auth || !googleProvider || !db) {
+      error = 'Firebase is not ready. Please refresh the page.';
+      return;
+    }
+
     error = '';
     loading = true;
 
     try {
-      const result = await signInWithPopup(auth!, googleProvider!);
+      const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
 
-      const userRef = doc(db!, 'users', user.uid);
+      const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
 
       if (!userSnap.exists()) {
@@ -65,20 +101,28 @@
       }
 
       await goto('/dashboard');
-    } catch (err: unknown) {
-      if (err instanceof Error) error = err.message;
-      else error = String(err);
+    } catch (err: any) {
+      console.error('Google sign in error:', err);
+      
+      if (err.code === 'auth/popup-closed-by-user') {
+        error = 'Sign in cancelled';
+      } else if (err.code === 'auth/popup-blocked') {
+        error = 'Popup blocked. Please allow popups for this site';
+      } else {
+        error = err.message || 'Failed to sign in with Google';
+      }
     } finally {
       loading = false;
     }
   }
 
   async function handleSignOut() {
+    if (!auth) return;
+
     try {
-      await signOut(auth!);
-    } catch (err: unknown) {
-      if (err instanceof Error) error = err.message;
-      else error = String(err);
+      await signOut(auth);
+    } catch (err: any) {
+      error = err.message || 'Failed to sign out';
     }
   }
 
@@ -89,7 +133,13 @@
 
 <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
   <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
-    {#if user}
+    {#if !firebaseReady}
+      <!-- Loading Firebase -->
+      <div class="text-center py-8">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+        <p class="text-gray-600">Initializing...</p>
+      </div>
+    {:else if user}
       <!-- Logged In View -->
       <div class="text-center">
         <div class="mb-6">
@@ -114,7 +164,7 @@
         </button>
       </div>
     {:else}
-      <!-- Login View ONLY -->
+      <!-- Login View -->
       <div>
         <h2 class="text-3xl font-bold text-center text-gray-800 mb-2">
           Welcome Back

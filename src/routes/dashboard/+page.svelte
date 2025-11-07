@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { Chart, registerables } from 'chart.js';
-	import { db } from '$lib/firebase';
 	import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
 	import { getAuth, onAuthStateChanged } from 'firebase/auth';
+    import { db, auth, googleProvider } from '$lib/firebase';
 
 	Chart.register(...registerables);
 
@@ -29,7 +29,7 @@
 	let user: any = null;
 
 
-
+	
 onMount(() => {
 	const auth = getAuth();
 onAuthStateChanged(auth, async (user) => {
@@ -52,7 +52,7 @@ onAuthStateChanged(auth, async (user) => {
 			if (!userUid) return;
 
 			const q = query(
-				collection(db, 'classified_waste'),
+				collection(db!, 'classified_waste'),
 				where('userId', '==', userUid),
 				orderBy('timestamp', 'asc')
 			);
@@ -232,7 +232,7 @@ async function getGroupedByDate() {
 		if (!userUid) return { dates: [], recyclable: [], biodegradable: [], nonBiodegradable: [] };
 		
 		const q = query(
-			collection(db, 'classified_waste'),
+			collection(db!, 'classified_waste'),
 			where('userId', '==', userUid),
 			orderBy('timestamp', 'asc')
 		);
@@ -284,7 +284,7 @@ else if (wasteType.includes('biodegradable')) dataByDate[date].biodegradable++;
 async function fetchGlobalCounts() {
 	try {
 		// query whole collection (no user filter) and aggregate
-		const q = query(collection(db, 'classified_waste'), orderBy('timestamp', 'asc'));
+		const q = query(collection(db!, 'classified_waste'), orderBy('timestamp', 'asc'));
 		const snap = await getDocs(q);
 
 		// reset

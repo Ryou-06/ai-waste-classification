@@ -37,7 +37,7 @@
 
 	onMount(async () => {
 		// Watch authentication state
-		onAuthStateChanged(auth, (user) => {
+		onAuthStateChanged(auth!, (user) => {
 			currentUser = user;
 			if (user) {
 				console.log('👤 Logged in as:', user.email);
@@ -174,7 +174,7 @@
 
 			const compressedImage = await compressImage(imageSrc, 400, 0.7);
 
-			await addDoc(collection(db, 'classified_waste'), {
+			await addDoc(collection(db!, 'classified_waste'), {
 				userId: currentUser.uid, // 🔥 Save user ID
 				email: currentUser.email,
 				imageSrc: compressedImage,

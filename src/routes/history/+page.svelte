@@ -30,7 +30,7 @@
 	];
 
 	onMount(() => {
-		onAuthStateChanged(auth, async (user) => {
+		onAuthStateChanged(auth!, async (user) => {
 			if (user) {
 				userID = user.uid;
 				await loadHistoryFromFirestore();
@@ -47,7 +47,7 @@
 			if (!userID) return;
 
 const q = query(
-  collection(db, 'classified_waste'),
+  collection(db!, 'classified_waste'),
   where('userId', '==', userID),
   orderBy('timestamp', 'desc')
 );
@@ -102,7 +102,7 @@ function filterHistory(filterValue: string) {
 	async function deleteItem() {
 		if (!itemToDelete) return;
 		try {
-			await deleteDoc(doc(db, 'classified_waste', itemToDelete));
+			await deleteDoc(doc(db!, 'classified_waste', itemToDelete));
 			history = history.filter((item) => item.id !== itemToDelete);
 			filterHistory(selectedFilter);
 			showDeleteModal = false;
@@ -119,7 +119,7 @@ function filterHistory(filterValue: string) {
 			return;
 		}
 		try {
-			const deletePromises = history.map((item) => deleteDoc(doc(db, 'classified_waste', item.id)));
+			const deletePromises = history.map((item) => deleteDoc(doc(db!, 'classified_waste', item.id)));
 			await Promise.all(deletePromises);
 			history = [];
 			filteredHistory = [];

@@ -34,7 +34,7 @@
       }
 
       // Create new user
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      const cred = await createUserWithEmailAndPassword(auth!, email, password);
       const newUser = cred.user;
 
       // Update user profile with display name
@@ -43,7 +43,7 @@
       });
 
       // Save user to Firestore
-      await setDoc(doc(db, 'users', newUser.uid), {
+      await setDoc(doc(db!, 'users', newUser.uid), {
         uid: newUser.uid,
         email: newUser.email,
         displayName: displayName.trim(),
@@ -70,10 +70,10 @@
     loading = true;
 
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth!, googleProvider!);
       const user = result.user;
 
-      const userRef = doc(db, 'users', user.uid);
+      const userRef = doc(db!, 'users', user.uid);
       const userSnap = await getDoc(userRef);
 
       if (!userSnap.exists()) {
