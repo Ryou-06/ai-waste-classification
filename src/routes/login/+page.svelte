@@ -18,25 +18,38 @@
   let loading = false;
   let firebaseReady = false;
 
-  onMount(() => {
-    // Check if Firebase is initialized
-    if (!auth || !googleProvider || !db) {
-      error = 'Firebase is not initialized. Please check your configuration.';
-      console.error('Firebase initialization failed:', { auth, googleProvider, db });
-      return;
+onMount(() => {
+  // Enhanced debugging
+  console.log('=== Firebase Debug Info ===');
+  console.log('Environment:', import.meta.env.MODE);
+  console.log('Auth exists:', !!auth);
+  console.log('GoogleProvider exists:', !!googleProvider);
+  console.log('DB exists:', !!db);
+  console.log('API Key loaded:', !!import.meta.env.VITE_FIREBASE_API_KEY);
+  console.log('API Key (first 10):', import.meta.env.VITE_FIREBASE_API_KEY?.substring(0, 10));
+  console.log('Auth Domain:', import.meta.env.VITE_FIREBASE_AUTH_DOMAIN);
+  console.log('Project ID:', import.meta.env.VITE_FIREBASE_PROJECT_ID);
+  console.log('All VITE_ vars:', Object.keys(import.meta.env).filter(k => k.startsWith('VITE_')));
+  console.log('=========================');
+
+  // Check if Firebase is initialized
+  if (!auth || !googleProvider || !db) {
+    error = 'Firebase is not initialized. Please check your configuration.';
+    console.error('Firebase initialization failed:', { auth, googleProvider, db });
+    return;
+  }
+
+  firebaseReady = true;
+
+  const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    user = currentUser;
+    if (currentUser) {
+      console.log('User logged in:', currentUser.email);
     }
-
-    firebaseReady = true;
-
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      user = currentUser;
-      if (currentUser) {
-        console.log('User logged in:', currentUser.email);
-      }
-    });
-
-    return () => unsubscribe();
   });
+
+  return () => unsubscribe();
+});
 
   async function handleEmailSignIn() {
     if (!firebaseReady || !auth) {
