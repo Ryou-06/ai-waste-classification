@@ -2,9 +2,21 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { getAuth, onAuthStateChanged } from 'firebase/auth';
+  import { db } from '$lib/firebase';
+  import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 
   let user: any = null;
   let loading = true;
+  let statsLoading = true;
+  
+  // Environmental impact stats
+  let totalItems = 0;
+  let co2Saved = 0;
+  let waterSaved = 0;
+  let energySaved = 0;
+  let recyclableCount = 0;
+  let biodegradableCount = 0;
+  let nonBiodegradableCount = 0;
 
   onMount(() => {
     const auth = getAuth();
@@ -18,8 +30,73 @@
       }
     });
 
+    // Fetch global statistics from ALL users
+    fetchGlobalStats();
+
     return () => unsubscribe();
   });
+
+async function fetchGlobalStats() {
+  try {
+    statsLoading = true;
+    
+    // Query entire collection (ALL users, no filter or ordering)
+    const wasteRef = collection(db!, 'classified_waste');
+    const querySnapshot = await getDocs(wasteRef);
+    
+    console.log('📊 Total documents fetched:', querySnapshot.size);
+    
+    // Reset counts
+    recyclableCount = 0;
+    biodegradableCount = 0;
+    nonBiodegradableCount = 0;
+
+    // Count each waste type from ALL users
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      const wasteType = (data.wasteType || '').toLowerCase().trim();
+      
+      console.log('🔍 Document:', doc.id, 'wasteType:', data.wasteType);
+      
+      // More flexible matching
+      if (wasteType.includes('recyclable') && !wasteType.includes('non')) {
+        recyclableCount++;
+      } else if (wasteType.includes('non-biodegradable') || wasteType.includes('nonbiodegradable')) {
+        nonBiodegradableCount++;
+      } else if (wasteType.includes('biodegradable')) {
+        biodegradableCount++;
+      }
+    });
+
+    totalItems = querySnapshot.size;
+
+    // Calculate environmental impact based on waste counts
+    co2Saved = (recyclableCount * 0.5) + (biodegradableCount * 0.3) + (nonBiodegradableCount * 0.1);
+    waterSaved = (recyclableCount * 15) + (biodegradableCount * 5) + (nonBiodegradableCount * 2);
+    energySaved = (recyclableCount * 2.3) + (biodegradableCount * 1.5) + (nonBiodegradableCount * 0.5);
+    
+    statsLoading = false;
+    console.log('✅ Global stats loaded from ALL users:', { 
+      totalItems, 
+      recyclableCount, 
+      biodegradableCount, 
+      nonBiodegradableCount,
+      co2Saved: co2Saved.toFixed(1),
+      waterSaved: waterSaved.toFixed(0),
+      energySaved: energySaved.toFixed(1)
+    });
+  } catch (error) {
+    console.error('❌ Error fetching global stats:', error);
+    statsLoading = false;
+  }
+}
+
+  function formatNumber(num: number): string {
+    if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'k';
+    }
+    return num.toFixed(1);
+  }
 
   function handleGetStarted() {
     goto('/register');
@@ -74,6 +151,52 @@
         </div>
       </div>
 
+      <!-- Global Environmental Impact Stats from ALL Users -->
+      <div class="mb-12 sm:mb-16 md:mb-20 px-2">
+        <div class="text-center mb-6 sm:mb-8">
+          <h2 class="text-2xl sm:text-3xl font-bold text-white mb-2">🌍 Collective Environmental Impact</h2>
+          <p class="text-sm sm:text-base text-slate-400">Real-time impact from our entire community</p>
+        </div>
+        
+        {#if statsLoading}
+          <div class="flex justify-center py-8">
+            <div class="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        {:else}
+          <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 max-w-5xl mx-auto">
+            <!-- CO2 Saved -->
+            <div class="bg-gradient-to-br from-blue-600/20 to-cyan-600/20 border border-blue-500/30 rounded-xl sm:rounded-2xl p-6 sm:p-8 text-center backdrop-blur-xl">
+              <div class="w-16 h-16 sm:w-20 sm:h-20 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="text-4xl sm:text-5xl">🌍</span>
+              </div>
+              <h3 class="text-lg sm:text-xl font-semibold text-blue-400 mb-2">CO₂ Saved</h3>
+              <p class="text-3xl sm:text-4xl font-bold text-white mb-1">{formatNumber(co2Saved)} kg</p>
+              <p class="text-xs sm:text-sm text-slate-400">Estimated carbon footprint reduction</p>
+            </div>
+
+            <!-- Water Saved -->
+            <div class="bg-gradient-to-br from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-xl sm:rounded-2xl p-6 sm:p-8 text-center backdrop-blur-xl">
+              <div class="w-16 h-16 sm:w-20 sm:h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="text-4xl sm:text-5xl">💧</span>
+              </div>
+              <h3 class="text-lg sm:text-xl font-semibold text-green-400 mb-2">Water Saved</h3>
+              <p class="text-3xl sm:text-4xl font-bold text-white mb-1">{formatNumber(waterSaved)} L</p>
+              <p class="text-xs sm:text-sm text-slate-400">Through proper recycling practices</p>
+            </div>
+
+            <!-- Energy Saved -->
+            <div class="bg-gradient-to-br from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-xl sm:rounded-2xl p-6 sm:p-8 text-center backdrop-blur-xl sm:col-span-2 lg:col-span-1">
+              <div class="w-16 h-16 sm:w-20 sm:h-20 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="text-4xl sm:text-5xl">⚡</span>
+              </div>
+              <h3 class="text-lg sm:text-xl font-semibold text-purple-400 mb-2">Energy Saved</h3>
+              <p class="text-3xl sm:text-4xl font-bold text-white mb-1">{formatNumber(energySaved)} kWh</p>
+              <p class="text-xs sm:text-sm text-slate-400">Renewable energy equivalent</p>
+            </div>
+          </div>
+        {/if}
+      </div>
+
       <!-- Stats -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 md:gap-6 mb-12 sm:mb-16 md:mb-20 px-2">
         <div class="bg-slate-800/50 backdrop-blur-xl rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-slate-700/50 text-center">
@@ -88,7 +211,7 @@
         </div>
         <div class="bg-slate-800/50 backdrop-blur-xl rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-slate-700/50 text-center">
           <div class="text-3xl sm:text-4xl mb-1 sm:mb-2">🌍</div>
-          <p class="text-2xl sm:text-3xl font-bold text-white mb-0.5 sm:mb-1">50k+</p>
+          <p class="text-2xl sm:text-3xl font-bold text-white mb-0.5 sm:mb-1">{statsLoading ? '...' : formatNumber(totalItems)}+</p>
           <p class="text-slate-400 text-xs sm:text-sm">Waste Items Sorted</p>
         </div>
         <div class="bg-slate-800/50 backdrop-blur-xl rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-slate-700/50 text-center">
