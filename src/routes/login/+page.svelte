@@ -19,7 +19,6 @@
   let firebaseReady = false;
 
 onMount(() => {
-  // Enhanced debugging
   console.log('=== Firebase Debug Info ===');
   console.log('Environment:', import.meta.env.MODE);
   console.log('Auth exists:', !!auth);
@@ -32,7 +31,6 @@ onMount(() => {
   console.log('All VITE_ vars:', Object.keys(import.meta.env).filter(k => k.startsWith('VITE_')));
   console.log('=========================');
 
-  // Check if Firebase is initialized
   if (!auth || !googleProvider || !db) {
     error = 'Firebase is not initialized. Please check your configuration.';
     console.error('Firebase initialization failed:', { auth, googleProvider, db });
@@ -69,7 +67,6 @@ onMount(() => {
     } catch (err: any) {
       console.error('Sign in error:', err);
       
-      // User-friendly error messages
       if (err.code === 'auth/invalid-credential') {
         error = 'Invalid email or password';
       } else if (err.code === 'auth/user-not-found') {
@@ -144,57 +141,70 @@ onMount(() => {
   }
 </script>
 
-<div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
+  <!-- Animated background elements -->
+  <div class="absolute inset-0 overflow-hidden pointer-events-none">
+    <div class="absolute top-20 left-10 w-72 h-72 bg-green-500/10 rounded-full blur-3xl animate-pulse"></div>
+    <div class="absolute bottom-20 right-10 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse" style="animation-delay: 1s;"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-500/5 rounded-full blur-3xl animate-pulse" style="animation-delay: 2s;"></div>
+  </div>
+
+  <!-- Decorative grid -->
+  <div class="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_110%)] pointer-events-none"></div>
+
+  <div class="relative bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl w-full max-w-md p-8">
     {#if !firebaseReady}
-      <!-- Loading Firebase -->
       <div class="text-center py-8">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-        <p class="text-gray-600">Initializing...</p>
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
+        <p class="text-slate-300">Initializing...</p>
       </div>
     {:else if user}
-      <!-- Logged In View -->
       <div class="text-center">
         <div class="mb-6">
           {#if user.photoURL}
-            <img src={user.photoURL} alt="Profile" class="w-20 h-20 rounded-full mx-auto mb-4 border-4 border-indigo-100" />
+            <img src={user.photoURL} alt="Profile" class="w-20 h-20 rounded-full mx-auto mb-4 border-4 border-green-500/30" />
           {:else}
-            <div class="w-20 h-20 rounded-full mx-auto mb-4 bg-indigo-500 flex items-center justify-center text-white text-2xl font-bold">
+            <div class="w-20 h-20 rounded-full mx-auto mb-4 bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-green-500/30">
               {user.displayName ? user.displayName[0].toUpperCase() : (user.email ? user.email[0].toUpperCase() : 'U')}
             </div>
           {/if}
-          <h2 class="text-2xl font-bold text-gray-800 mb-2">
+          <h2 class="text-2xl font-bold text-white mb-2">
             Welcome{user.displayName ? `, ${user.displayName}` : ''}!
           </h2>
-          <p class="text-gray-600">{user.email ?? 'No email available'}</p>
+          <p class="text-slate-400">{user.email ?? 'No email available'}</p>
         </div>
         
         <button 
           on:click={handleSignOut}
-          class="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-200"
+          class="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 shadow-lg shadow-red-500/20"
         >
           Sign Out
         </button>
       </div>
     {:else}
-      <!-- Login View -->
       <div>
-        <h2 class="text-3xl font-bold text-center text-gray-800 mb-2">
-          Welcome Back
-        </h2>
-        <p class="text-center text-gray-600 mb-8">
-          Sign in to your account
-        </p>
+        <!-- Logo/Icon -->
+        <div class="text-center mb-6">
+          <!-- <div class="w-16 h-16 bg-gradient-to-br from-green-400 to-emerald-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-green-500/30">
+            <span class="text-3xl">♻️</span>
+          </div> -->
+          <h2 class="text-3xl font-bold text-white mb-2">
+            Welcome Back
+          </h2>
+          <p class="text-slate-400">
+            Sign in to your EcoSort account
+          </p>
+        </div>
 
         {#if error}
-          <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+          <div class="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg mb-4 backdrop-blur-sm">
             {error}
           </div>
         {/if}
 
         <form on:submit|preventDefault={handleEmailSignIn} class="space-y-4 mb-6">
           <div>
-            <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
+            <label for="email" class="block text-sm font-medium text-slate-300 mb-2">
               Email
             </label>
             <input
@@ -202,13 +212,13 @@ onMount(() => {
               type="email"
               bind:value={email}
               required
-              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+              class="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition text-white placeholder-slate-500"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
+            <label for="password" class="block text-sm font-medium text-slate-300 mb-2">
               Password
             </label>
             <input
@@ -217,7 +227,7 @@ onMount(() => {
               bind:value={password}
               required
               minlength="6"
-              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+              class="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition text-white placeholder-slate-500"
               placeholder="••••••••"
             />
           </div>
@@ -225,25 +235,25 @@ onMount(() => {
           <button
             type="submit"
             disabled={loading}
-            class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-semibold py-3 px-4 rounded-lg transition duration-200"
+            class="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:from-green-700 disabled:to-emerald-800 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 shadow-lg shadow-green-500/30 transform hover:scale-[1.02] active:scale-[0.98]"
           >
-            {loading ? 'Loading...' : 'Sign In'}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
         <div class="relative mb-6">
           <div class="absolute inset-0 flex items-center">
-            <div class="w-full border-t border-gray-300"></div>
+            <div class="w-full border-t border-slate-700"></div>
           </div>
           <div class="relative flex justify-center text-sm">
-            <span class="px-2 bg-white text-gray-500">Or continue with</span>
+            <span class="px-2 bg-slate-800/50 text-slate-400">Or continue with</span>
           </div>
         </div>
 
         <button
           on:click={handleGoogleSignIn}
           disabled={loading}
-          class="w-full bg-white hover:bg-gray-50 border-2 border-gray-300 text-gray-700 font-semibold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center gap-3"
+          class="w-full bg-slate-900/50 hover:bg-slate-900/80 border-2 border-slate-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center gap-3 transform hover:scale-[1.02] active:scale-[0.98]"
         >
           <svg class="w-5 h-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -257,7 +267,7 @@ onMount(() => {
         <div class="text-center mt-6">
           <button
             on:click={goToRegister}
-            class="text-indigo-600 hover:text-indigo-700 font-medium text-sm"
+            class="text-green-400 hover:text-green-300 font-medium text-sm transition-colors"
           >
             Don't have an account? Sign up
           </button>
@@ -266,3 +276,20 @@ onMount(() => {
     {/if}
   </div>
 </div>
+
+<style>
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(1.05);
+    }
+  }
+
+  .animate-pulse {
+    animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+</style>
