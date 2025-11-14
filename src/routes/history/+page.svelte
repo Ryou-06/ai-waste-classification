@@ -19,6 +19,7 @@
 	let selectedFilter = 'all';
 	let showDeleteModal = false;
 	let itemToDelete: string | null = null;
+	let showClearAllModal = false;
 	let viewMode: 'grid' | 'list' = 'grid';
 	let userID: string | null = null;
 
@@ -46,11 +47,11 @@
 		try {
 			if (!userID) return;
 
-const q = query(
-  collection(db!, 'classified_waste'),
-  where('userId', '==', userID),
-  orderBy('timestamp', 'desc')
-);
+			const q = query(
+				collection(db!, 'classified_waste'),
+				where('userId', '==', userID),
+				orderBy('timestamp', 'desc')
+			);
 
 			const querySnapshot = await getDocs(q);
 			history = querySnapshot.docs.map((docSnap) => {
@@ -71,28 +72,25 @@ const q = query(
 		}
 	}
 
-function filterHistory(filterValue: string) {
-    selectedFilter = filterValue;
-    if (filterValue === 'all') {
-        filteredHistory = history;
-    } else if (filterValue === 'non-biodegradable') {
-        // Must check for exact "non-biodegradable" match
-        filteredHistory = history.filter((item) =>
-            item.prediction.toLowerCase().includes('non-biodegradable')
-        );
-    } else if (filterValue === 'biodegradable') {
-        // Only match "biodegradable" but NOT "non-biodegradable"
-        filteredHistory = history.filter((item) => {
-            const pred = item.prediction.toLowerCase();
-            return pred.includes('biodegradable') && !pred.includes('non-biodegradable');
-        });
-    } else {
-        // For recyclable or any other filter
-        filteredHistory = history.filter((item) =>
-            item.prediction.toLowerCase().includes(filterValue.toLowerCase())
-        );
-    }
-}
+	function filterHistory(filterValue: string) {
+		selectedFilter = filterValue;
+		if (filterValue === 'all') {
+			filteredHistory = history;
+		} else if (filterValue === 'non-biodegradable') {
+			filteredHistory = history.filter((item) =>
+				item.prediction.toLowerCase().includes('non-biodegradable')
+			);
+		} else if (filterValue === 'biodegradable') {
+			filteredHistory = history.filter((item) => {
+				const pred = item.prediction.toLowerCase();
+				return pred.includes('biodegradable') && !pred.includes('non-biodegradable');
+			});
+		} else {
+			filteredHistory = history.filter((item) =>
+				item.prediction.toLowerCase().includes(filterValue.toLowerCase())
+			);
+		}
+	}
 
 	function confirmDelete(id: string) {
 		itemToDelete = id;
@@ -114,15 +112,17 @@ function filterHistory(filterValue: string) {
 		}
 	}
 
+	function confirmClearAll() {
+		showClearAllModal = true;
+	}
+
 	async function clearAllHistory() {
-		if (!confirm('Are you sure you want to delete ALL classification history? This cannot be undone.')) {
-			return;
-		}
 		try {
 			const deletePromises = history.map((item) => deleteDoc(doc(db!, 'classified_waste', item.id)));
 			await Promise.all(deletePromises);
 			history = [];
 			filteredHistory = [];
+			showClearAllModal = false;
 			console.log('✅ All history cleared');
 		} catch (error) {
 			console.error('❌ Error clearing history:', error);
@@ -168,6 +168,7 @@ function filterHistory(filterValue: string) {
 				<div class="text-7xl mb-6">📭</div>
 				<h3 class="text-2xl font-bold text-white mb-3">No Classification History</h3>
 				<p class="text-slate-400 mb-6">Start classifying waste items to see them here!</p>
+				
 				<a
 					href="/wasteClassifier"
 					class="inline-flex items-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white px-8 py-4 rounded-xl font-semibold shadow-lg hover:shadow-green-500/50 transform hover:scale-105 transition-all duration-300"
@@ -185,32 +186,32 @@ function filterHistory(filterValue: string) {
 					<!-- Filters -->
 					<div class="flex flex-wrap gap-2">
 						{#each filters as filter}
-<button
-    onclick={() => filterHistory(filter.value)}
-    class="px-6 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center gap-2
-        {selectedFilter === filter.value
-            ? 'bg-gradient-to-r from-purple-500/30 to-pink-500/30 text-purple-300 border-2 border-purple-500/50'
-            : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 border-2 border-transparent'}"
->
-    <span class="text-xl">{filter.icon}</span>
-    <span>{filter.label}</span>
-    {#if filter.value === 'all'}
-        <span class="bg-slate-600 text-white px-2 py-0.5 rounded-full text-xs">
-            {history.length}
-        </span>
-    {:else if filter.value === 'biodegradable'}
-        <span class="bg-slate-600 text-white px-2 py-0.5 rounded-full text-xs">
-            {history.filter(item => {
-                const pred = item.prediction.toLowerCase();
-                return pred.includes('biodegradable') && !pred.includes('non-biodegradable');
-            }).length}
-        </span>
-    {:else}
-        <span class="bg-slate-600 text-white px-2 py-0.5 rounded-full text-xs">
-            {history.filter(item => item.prediction.toLowerCase().includes(filter.value.toLowerCase())).length}
-        </span>
-    {/if}
-</button>
+							<button
+								onclick={() => filterHistory(filter.value)}
+								class="px-6 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center gap-2
+									{selectedFilter === filter.value
+										? 'bg-gradient-to-r from-purple-500/30 to-pink-500/30 text-purple-300 border-2 border-purple-500/50'
+										: 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 border-2 border-transparent'}"
+							>
+								<span class="text-xl">{filter.icon}</span>
+								<span>{filter.label}</span>
+								{#if filter.value === 'all'}
+									<span class="bg-slate-600 text-white px-2 py-0.5 rounded-full text-xs">
+										{history.length}
+									</span>
+								{:else if filter.value === 'biodegradable'}
+									<span class="bg-slate-600 text-white px-2 py-0.5 rounded-full text-xs">
+										{history.filter(item => {
+											const pred = item.prediction.toLowerCase();
+											return pred.includes('biodegradable') && !pred.includes('non-biodegradable');
+										}).length}
+									</span>
+								{:else}
+									<span class="bg-slate-600 text-white px-2 py-0.5 rounded-full text-xs">
+										{history.filter(item => item.prediction.toLowerCase().includes(filter.value.toLowerCase())).length}
+									</span>
+								{/if}
+							</button>
 						{/each}
 					</div>
 
@@ -236,7 +237,7 @@ function filterHistory(filterValue: string) {
 						</div>
 
 						<button
-							onclick={clearAllHistory}
+							onclick={confirmClearAll}
 							class="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:shadow-red-500/50 hover:scale-105 transform flex items-center gap-2"
 						>
 							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -364,7 +365,7 @@ function filterHistory(filterValue: string) {
 	</div>
 </div>
 
-<!-- Delete Confirmation Modal -->
+<!-- Delete Single Item Confirmation Modal -->
 {#if showDeleteModal}
 	<div class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
 		<div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-md w-full shadow-2xl transform scale-100 animate-fade-in">
@@ -389,6 +390,37 @@ function filterHistory(filterValue: string) {
 					class="flex-1 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200"
 				>
 					Delete
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Clear All Confirmation Modal -->
+{#if showClearAllModal}
+	<div class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+		<div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-md w-full shadow-2xl transform scale-100 animate-fade-in">
+			<div class="text-center mb-6">
+				<div class="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+					<svg class="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+					</svg>
+				</div>
+				<h3 class="text-2xl font-bold text-white mb-2">Clear All History</h3>
+				<p class="text-slate-400">Are you sure you want to delete ALL classification history? This action cannot be undone.</p>
+			</div>
+			<div class="flex gap-4">
+				<button
+					onclick={() => { showClearAllModal = false; }}
+					class="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200"
+				>
+					Cancel
+				</button>
+				<button
+					onclick={clearAllHistory}
+					class="flex-1 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200"
+				>
+					Clear All
 				</button>
 			</div>
 		</div>
