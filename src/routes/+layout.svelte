@@ -4,21 +4,39 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { getAuth, signOut, onAuthStateChanged } from 'firebase/auth';
+	import { doc, getDoc } from 'firebase/firestore';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
 	let mobileMenuOpen = $state(false);
 	let userMenuOpen = $state(false);
 	let user: any = $state(null);
+	let userProfile: any = $state(null);
 	let authInitialized = $state(false);
 
-	import { auth } from '$lib/firebase';  // ← Import from your firebase.js
+	import { auth, db } from '$lib/firebase';
 
 	onMount(() => {
-		const unsubscribe = onAuthStateChanged(auth!, (currentUser) => {
+		const unsubscribe = onAuthStateChanged(auth!, async (currentUser) => {
 			user = currentUser;
 			authInitialized = true;
 			console.log('Auth state changed:', currentUser ? 'Logged in' : 'Logged out');
+			
+			// Fetch user profile data from Firestore
+			if (currentUser) {
+				try {
+					const userDocRef = doc(db!, 'users', currentUser.uid);
+					const userDoc = await getDoc(userDocRef);
+					if (userDoc.exists()) {
+						userProfile = userDoc.data();
+						console.log('User profile loaded:', userProfile);
+					}
+				} catch (error) {
+					console.error('Error fetching user profile:', error);
+				}
+			} else {
+				userProfile = null;
+			}
 		});
 
 		function handleClickOutside(event: MouseEvent) {
@@ -55,11 +73,16 @@
 		goto('/register');
 	}
 
+	function handleProfileNav() {
+		userMenuOpen = false;
+		goto('/profile');
+	}
+
 	async function handleLogout() {
 		try {
 			await signOut(auth!);
 			userMenuOpen = false;
-			// Wait a bit for auth state to clear
+			userProfile = null;
 			await new Promise(resolve => setTimeout(resolve, 100));
 			goto('/');
 		} catch (error) {
@@ -105,10 +128,9 @@
 			</a>
 
 			<!-- Desktop Navigation -->
-			<div class="hidden lg:flex items-center gap-1">
+			<div class="hidden lg:flex items-center gap-1 flex-1 justify-center">
 				{#each navItems as item}
 					{#if item.protected}
-						<!-- Protected links -->
 						<button
 							on:click={() => handleProtectedNav(item.href)}
 							class="relative px-3 xl:px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 text-sm xl:text-base
@@ -124,7 +146,6 @@
 							<span class="hidden xl:inline">{item.label}</span>
 						</button>
 					{:else}
-						<!-- Public links -->
 						<a
 							href={item.href}
 							class="relative px-3 xl:px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 text-sm xl:text-base
@@ -139,7 +160,7 @@
 				{/each}
 			</div>
 
-			<!-- User Menu / Auth Buttons -->
+			<!-- USER MENU (Avatar updated here) -->
 			<div class="hidden lg:flex items-center gap-2 xl:gap-3">
 				{#if authInitialized}
 					{#if user}
@@ -148,10 +169,22 @@
 								on:click={toggleUserMenu}
 								class="bg-slate-800 hover:bg-slate-700 text-white px-3 xl:px-4 py-2 rounded-lg font-medium shadow-sm flex items-center gap-2 transition-all duration-200 text-sm xl:text-base"
 							>
-								<div class="w-6 h-6 xl:w-7 xl:h-7 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-xs xl:text-sm font-bold flex-shrink-0">
-									{(user.displayName || user.email)?.[0]?.toUpperCase() || 'U'}
-								</div>
-								<span class="max-w-[80px] xl:max-w-[120px] truncate">{user.displayName || user.email?.split('@')[0] || 'User'}</span>
+
+								<!-- UPDATED AVATAR -->
+								{#if userProfile?.photoURL}
+									<img
+										src={userProfile.photoURL}
+										alt="Profile"
+										class="w-6 h-6 xl:w-7 xl:h-7 rounded-full object-cover border border-slate-600 flex-shrink-0"
+									/>
+								{:else}
+									<div class="w-6 h-6 xl:w-7 xl:h-7 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-xs xl:text-sm font-bold flex-shrink-0">
+										{(userProfile?.displayName || user.displayName || user.email)?.[0]?.toUpperCase() || 'U'}
+									</div>
+								{/if}
+
+								<span class="max-w-[80px] xl:max-w-[120px] truncate">{userProfile?.displayName || user.displayName || user.email?.split('@')[0] || 'User'}</span>
+
 								<svg 
 									class="w-3 h-3 xl:w-4 xl:h-4 transition-transform duration-200 flex-shrink-0 {userMenuOpen ? 'rotate-180' : ''}" 
 									fill="none" 
@@ -168,6 +201,15 @@
 										<p class="text-sm text-slate-400">Signed in as</p>
 										<p class="text-sm text-white font-medium truncate">{user.email}</p>
 									</div>
+									<button
+										on:click={handleProfileNav}
+										class="w-full text-left px-4 py-2 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors duration-200 flex items-center gap-2"
+									>
+										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+										</svg>
+										<span>Profile</span>
+									</button>
 									<button
 										on:click={handleLogout}
 										class="w-full text-left px-4 py-2 text-slate-300 hover:bg-red-600 hover:text-white transition-colors duration-200 flex items-center gap-2"
@@ -197,7 +239,7 @@
 				{/if}
 			</div>
 
-			<!-- Mobile menu button -->
+			<!-- Mobile Menu Button -->
 			<button
 				on:click={toggleMobileMenu}
 				class="lg:hidden relative w-9 h-9 sm:w-10 sm:h-10 text-slate-300 hover:text-white focus:outline-none flex-shrink-0"
@@ -213,10 +255,12 @@
 		</div>
 	</div>
 
-	<!-- Mobile Menu -->
+	<!-- MOBILE MENU (Updated profile avatar also here) -->
 	{#if mobileMenuOpen}
 		<div class="lg:hidden border-t border-slate-700/50 bg-slate-900/98 backdrop-blur-xl max-h-[calc(100vh-3.5rem)] sm:max-h-[calc(100vh-4rem)] overflow-y-auto">
 			<div class="px-3 sm:px-4 py-3 sm:py-4 space-y-1.5 sm:space-y-2">
+				
+				<!-- Navigation Items -->
 				{#each navItems as item}
 					{#if item.protected}
 						<button
@@ -250,14 +294,42 @@
 					{/if}
 				{/each}
 
-				<!-- Mobile Auth Buttons -->
+				<!-- MOBILE USER SECTION -->
 				{#if authInitialized}
 					{#if user}
 						<div class="pt-3 sm:pt-4 border-t border-slate-700/50 space-y-1.5 sm:space-y-2">
-							<div class="px-3 sm:px-4 py-1.5 sm:py-2">
-								<p class="text-[10px] sm:text-xs text-slate-400">Signed in as</p>
-								<p class="text-xs sm:text-sm text-white font-medium truncate">{user.email}</p>
+
+							<div class="px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-3">
+
+								<!-- UPDATED MOBILE AVATAR -->
+								{#if userProfile?.photoURL}
+									<img
+										src={userProfile.photoURL}
+										alt="Profile"
+										class="w-8 h-8 rounded-full object-cover border border-slate-600"
+									/>
+								{:else}
+									<div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-sm font-bold">
+										{(userProfile?.displayName || user.displayName || user.email)?.[0]?.toUpperCase() || 'U'}
+									</div>
+								{/if}
+
+								<div>
+									<p class="text-[10px] sm:text-xs text-slate-400">Signed in as</p>
+									<p class="text-xs sm:text-sm text-white font-medium truncate">{user.email}</p>
+								</div>
 							</div>
+
+							<button
+								on:click={() => { handleProfileNav(); closeMobileMenu(); }}
+								class="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-slate-700 hover:bg-slate-600 active:bg-slate-500 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 text-sm sm:text-base"
+							>
+								<svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+								</svg>
+								<span>My Profile</span>
+							</button>
+
 							<button
 								on:click={handleLogout}
 								class="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 text-sm sm:text-base"
@@ -267,6 +339,7 @@
 								</svg>
 								<span>Logout</span>
 							</button>
+
 						</div>
 					{:else}
 						<div class="pt-3 sm:pt-4 border-t border-slate-700/50 space-y-1.5 sm:space-y-2">
@@ -302,14 +375,12 @@
 		overflow-x: hidden;
 	}
 
-	/* Ensure proper touch targets on mobile */
 	@media (max-width: 1023px) {
 		button, a {
 			-webkit-tap-highlight-color: transparent;
 		}
 	}
 
-	/* Custom breakpoint for extra small devices */
 	@media (min-width: 375px) {
 		.xs\:block {
 			display: block;

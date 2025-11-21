@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getStorage } from 'firebase/storage'; // Add this import
 import { browser } from '$app/environment';
 
 // Validate and log environment variables (only in development)
@@ -59,6 +60,9 @@ let auth;
 /** @type {import('firebase/auth').GoogleAuthProvider | undefined} */
 let googleProvider;
 
+/** @type {import('firebase/storage').FirebaseStorage | undefined} */
+let storage; // Add this declaration
+
 if (browser) {
   try {
     const firebaseConfig = getFirebaseConfig();
@@ -66,6 +70,7 @@ if (browser) {
     db = getFirestore(app);
     auth = getAuth(app);
     googleProvider = new GoogleAuthProvider();
+    storage = getStorage(app); // Add this initialization
     
     console.log('Firebase initialized successfully');
   } catch (error) {
@@ -74,4 +79,4 @@ if (browser) {
   }
 }
 
-export { db, auth, googleProvider };
+export { db, auth, googleProvider, storage }; // Add storage to exports
