@@ -37,6 +37,14 @@
 	let tapTimeout: any = null;
 	let showFlipAnimation = false;
 
+	// ✨ NEW: Invalid image detection states
+	let isInvalidImage = false;
+	let invalidReason = '';
+	let showInvalidNotification = false;
+
+	// ✨ NEW: Confidence threshold for validation
+	const CONFIDENCE_THRESHOLD = 0.85;
+
 	onMount(() => {
 		// Watch authentication state
 		let unsubscribe: (() => void) | undefined;
@@ -83,6 +91,8 @@
 			imagePreview = null;
 			prediction = '';
 			showResult = false;
+			isInvalidImage = false;
+			showInvalidNotification = false;
 
 			stream = await navigator.mediaDevices.getUserMedia({ 
 				video: { facingMode: currentFacingMode, width: { ideal: 1280 }, height: { ideal: 720 } } 
@@ -153,35 +163,150 @@
 		cameraActive = false;
 	}
 
-	async function predictImage(imageSrc: string) {
+	// ✨ NEW: Pre-classification validation (Option 1)
+	async function validateImageContent(imageSrc: string): Promise<{ valid: boolean; reason: string }> {
 		if (!model) {
-			alert('Model not loaded yet!');
-			return;
+			return { valid: true, reason: '' };
 		}
-
-		loading = true;
-		showResult = false;
 
 		const img = new Image();
 		img.src = imageSrc;
-		img.onload = async () => {
-			const predictions = await model.predict(img);
-			type Prediction = { className: string; probability: number };
 
-			const bestPrediction = (predictions as Prediction[]).reduce(
-				(a, b) => (a.probability > b.probability ? a : b)
-			);
+		return new Promise((resolve) => {
+			img.onload = async () => {
+				const predictions = await model.predict(img);
+				type Prediction = { className: string; probability: number };
 
-			prediction = bestPrediction.className;
-			confidence = (bestPrediction.probability * 100).toFixed(2) + '%';
-			loading = false;
+				const bestPrediction = (predictions as Prediction[]).reduce(
+					(a, b) => (a.probability > b.probability ? a : b)
+				);
 
-			setTimeout(() => (showResult = true), 100);
+				// Check if confidence is too low (likely not waste)
+				if (bestPrediction.probability < CONFIDENCE_THRESHOLD) {
+					resolve({ 
+						valid: false, 
+						reason: `Low confidence (${(bestPrediction.probability * 100).toFixed(1)}%). This doesn't appear to be waste material.` 
+					});
+					return;
+				}
 
-			await saveToFirestore(imageSrc, prediction, confidence);
-		};
+				// Check if it matches valid waste categories
+				const validCategories = ['recyclable', 'biodegradable', 'non-biodegradable'];
+				const categoryMatch = validCategories.some(cat => 
+					bestPrediction.className.toLowerCase().includes(cat)
+				);
+
+				if (!categoryMatch) {
+					resolve({ 
+						valid: false, 
+						reason: 'Image does not match any waste categories. Please capture waste items only.' 
+					});
+					return;
+				}
+
+				resolve({ valid: true, reason: '' });
+			};
+		});
 	}
 
+async function predictImage(imageSrc: string) {
+	if (!model) {
+		alert('Model not loaded yet!');
+		return;
+	}
+
+	loading = true;
+	showResult = false;
+	isInvalidImage = false;
+	showInvalidNotification = false;
+
+	const img = new Image();
+	img.src = imageSrc;
+	img.onload = async () => {
+		const predictions = await model.predict(img);
+		type Prediction = { className: string; probability: number };
+
+		// Get all predictions sorted by probability
+		const sortedPredictions = (predictions as Prediction[]).sort(
+			(a, b) => b.probability - a.probability
+		);
+
+		const bestPrediction = sortedPredictions[0];
+		const secondBestPrediction = sortedPredictions[1];
+
+		prediction = bestPrediction.className;
+		confidence = (bestPrediction.probability * 100).toFixed(2) + '%';
+		loading = false;
+
+		// ✨ ENHANCED VALIDATION #1: Check confidence threshold
+		if (bestPrediction.probability < CONFIDENCE_THRESHOLD) {
+			isInvalidImage = true;
+			invalidReason = 'Unable to Classify - Low Confidence';
+			showInvalidNotification = true;
+			console.warn('⚠️ Low confidence detection:', bestPrediction.probability);
+			return;
+		}
+
+		// ✨ ENHANCED VALIDATION #2: Check confidence gap (ambiguity detection)
+		// If the top 2 predictions are too close, the model is uncertain
+		const confidenceGap = bestPrediction.probability - secondBestPrediction.probability;
+		if (confidenceGap < 0.25) { // Less than 25% difference
+			isInvalidImage = true;
+			invalidReason = 'Unable to Classify - Ambiguous Image';
+			showInvalidNotification = true;
+			console.warn('⚠️ Ambiguous prediction. Top 2:', {
+				first: `${bestPrediction.className} (${(bestPrediction.probability * 100).toFixed(1)}%)`,
+				second: `${secondBestPrediction.className} (${(secondBestPrediction.probability * 100).toFixed(1)}%)`,
+				gap: `${(confidenceGap * 100).toFixed(1)}%`
+			});
+			return;
+		}
+
+		// ✨ ENHANCED VALIDATION #3: Check valid waste categories
+		const validCategories = ['recyclable', 'biodegradable', 'non-biodegradable'];
+		const categoryMatch = validCategories.some(cat => 
+			prediction.toLowerCase().includes(cat)
+		);
+
+		if (!categoryMatch) {
+			isInvalidImage = true;
+			invalidReason = 'Invalid Image - Not a Waste Item';
+			showInvalidNotification = true;
+			console.warn('⚠️ Category mismatch:', prediction);
+			return;
+		}
+
+		// ✨ ENHANCED VALIDATION #4: Additional suspicious pattern detection
+		// Check if the prediction seems unusual (e.g., body parts misclassified as biodegradable)
+		const suspiciousPatterns = [
+			{ keyword: 'biodegradable', minConfidence: 0.90 }, // Require 90% for biodegradable
+			{ keyword: 'recyclable', minConfidence: 0.85 },
+			{ keyword: 'non-biodegradable', minConfidence: 0.85 }
+		];
+
+		for (const pattern of suspiciousPatterns) {
+			if (prediction.toLowerCase().includes(pattern.keyword)) {
+				if (bestPrediction.probability < pattern.minConfidence) {
+					isInvalidImage = true;
+					invalidReason = `Unable to Classify - Insufficient Confidence for ${pattern.keyword}`;
+					showInvalidNotification = true;
+					console.warn(`⚠️ ${pattern.keyword} requires ${pattern.minConfidence * 100}% confidence, got ${(bestPrediction.probability * 100).toFixed(1)}%`);
+					return;
+				}
+			}
+		}
+
+		// ✅ All validations passed - show result and save
+		console.log('✅ Valid classification:', {
+			prediction: bestPrediction.className,
+			confidence: (bestPrediction.probability * 100).toFixed(2) + '%',
+			confidenceGap: (confidenceGap * 100).toFixed(2) + '%'
+		});
+		
+		setTimeout(() => (showResult = true), 100);
+		await saveToFirestore(imageSrc, prediction, confidence);
+	};
+}
 	async function saveToFirestore(imageSrc: string, wasteType: string, confidence: string) {
 		try {
 			if (!currentUser) {
@@ -245,6 +370,8 @@
 			closeCamera();
 			prediction = '';
 			showResult = false;
+			isInvalidImage = false;
+			showInvalidNotification = false;
 			await predictImage(imagePreview);
 		};
 		reader.readAsDataURL(file);
@@ -271,7 +398,15 @@
 		prediction = '';
 		confidence = '';
 		showResult = false;
+		isInvalidImage = false;
+		showInvalidNotification = false;
 		closeCamera();
+	}
+
+	// ✨ NEW: Retry after invalid detection
+	function retryCapture() {
+		resetClassifier();
+		openCamera();
 	}
 </script>
 
@@ -338,6 +473,50 @@
 										<span>Reset</span>
 									</button>
 								{/if}
+							</div>
+						{/if}
+
+						<!-- ✨ NEW: Invalid Image Notification (Toast) -->
+						{#if showInvalidNotification && isInvalidImage}
+							<div class="mb-6 bg-gradient-to-r from-red-500/20 to-orange-500/20 border-2 border-red-500 rounded-2xl p-6 backdrop-blur-sm animate-shake">
+								<div class="flex items-start gap-4">
+									<div class="text-5xl">⚠️</div>
+									<div class="flex-1">
+										<h3 class="text-2xl font-bold text-red-400 mb-2">{invalidReason}</h3>
+										<p class="text-slate-300 mb-3">
+											{#if invalidReason.includes('Low confidence')}
+												This doesn't appear to be waste material. The AI couldn't confidently identify it.
+											{:else}
+												Please capture an image of waste items only.
+											{/if}
+										</p>
+										<ul class="text-sm text-slate-400 mb-4 space-y-1">
+											<li>• Avoid capturing: people, body parts, or unrelated objects</li>
+											<li>• Ensure good lighting and clear view of the waste item</li>
+											<li>• Focus on one waste item at a time</li>
+										</ul>
+										<div class="flex flex-wrap gap-3">
+											<button
+												on:click={retryCapture}
+												class="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:scale-105 transform flex items-center gap-2"
+											>
+												<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+												</svg>
+												Try Again (Camera)
+											</button>
+											<label class="group relative cursor-pointer">
+												<div class="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 transition-all duration-300 px-6 py-3 rounded-xl font-semibold text-white shadow-lg hover:scale-105 transform flex items-center gap-2">
+													<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+													</svg>
+													Upload Different Image
+												</div>
+												<input type="file" accept="image/*" class="hidden" on:change={handleFileUpload} />
+											</label>
+										</div>
+									</div>
+								</div>
 							</div>
 						{/if}
 
@@ -412,8 +591,13 @@
 									<img
 										src={imagePreview}
 										alt="Preview"
-										class="rounded-2xl border-4 border-green-500/50 shadow-2xl shadow-green-500/20 max-w-md w-full transform transition-transform duration-300 group-hover:scale-105"
+										class={"rounded-2xl border-4 shadow-2xl max-w-md w-full transform transition-transform duration-300 group-hover:scale-105 " + (isInvalidImage ? 'border-red-500/80 shadow-red-500/40' : 'border-green-500/50 shadow-green-500/20')}
 									/>
+									{#if isInvalidImage}
+										<div class="absolute inset-0 bg-red-500/20 rounded-2xl flex items-center justify-center backdrop-blur-[2px]">
+											<div class="text-8xl animate-pulse">❌</div>
+										</div>
+									{/if}
 									{#if loading}
 										<div class="absolute inset-0 bg-black/60 backdrop-blur-sm rounded-2xl flex items-center justify-center">
 											<div class="text-center">
@@ -429,7 +613,7 @@
 						<canvas bind:this={canvasElement} class="hidden"></canvas>
 					</div>
 
-					{#if showResult && prediction}
+					{#if showResult && prediction && !isInvalidImage}
 						<div class="bg-gradient-to-r {getWasteColor(prediction)} p-8 transform transition-all duration-500 ease-out">
 							<div class="text-center text-white">
 								<div class="text-7xl mb-4 animate-bounce">
@@ -483,64 +667,76 @@
 		animation: flipCamera 0.6s ease-in-out;
 	}
 
-	@keyframes flipCamera {
-		0% { transform: scaleX(1); }
-		50% { transform: scaleX(0); }
-		100% { transform: scaleX(1); }
-	}
+@keyframes flipCamera {
+	0% { transform: scaleX(1); }
+	50% { transform: scaleX(0); }
+	100% { transform: scaleX(1); }
+}
 
-	:global(.animate-spin-slow) {
-		animation: spin 1s linear infinite;
-	}
+:global(.animate-spin-slow) {
+	animation: spin 1s linear infinite;
+}
 
-	@keyframes spin {
-		from { transform: rotate(0deg); }
-		to { transform: rotate(360deg); }
-	}
+@keyframes spin {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
 
-	.capture-button {
-		position: relative;
-		width: 80px;
-		height: 80px;
-		background: transparent;
-		border: none;
-		cursor: pointer;
-		padding: 0;
-		-webkit-tap-highlight-color: transparent;
-	}
+/* ✨ NEW: Shake animation for invalid notification */
+.animate-shake {
+	animation: shake 0.5s ease-in-out;
+}
 
-	.capture-outer {
-		width: 80px;
-		height: 80px;
-		border-radius: 50%;
-		border: 5px solid rgba(255, 255, 255, 0.9);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition: all 0.15s ease;
-		background: transparent;
-		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-	}
+@keyframes shake {
+	0%, 100% { transform: translateX(0); }
+	25% { transform: translateX(-10px); }
+	75% { transform: translateX(10px); }
+}
 
-	.capture-inner {
-		width: 60px;
-		height: 60px;
-		border-radius: 50%;
-		background: white;
-		transition: all 0.15s ease;
-	}
+.capture-button {
+	position: relative;
+	width: 80px;
+	height: 80px;
+	background: transparent;
+	border: none;
+	cursor: pointer;
+	padding: 0;
+	-webkit-tap-highlight-color: transparent;
+}
 
-	.capture-button:hover .capture-outer {
-		border-color: rgba(255, 255, 255, 1);
-		transform: scale(1.05);
-	}
+.capture-outer {
+	width: 80px;
+	height: 80px;
+	border-radius: 50%;
+	border: 5px solid rgba(255, 255, 255, 0.9);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: all 0.15s ease;
+	background: transparent;
+	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
 
-	.capture-button:active .capture-outer {
-		transform: scale(0.95);
-	}
+.capture-inner {
+	width: 60px;
+	height: 60px;
+	border-radius: 50%;
+	background: white;
+	transition: all 0.15s ease;
+}
 
-	.capture-button:active .capture-inner {
-		transform: scale(0.85);
-		background: rgba(255, 255, 255, 0.9);
-	}
+.capture-button:hover .capture-outer {
+	border-color: rgba(255, 255, 255, 1);
+	transform: scale(1.05);
+}
+
+.capture-button:active .capture-outer {
+	transform: scale(0.95);
+}
+
+.capture-button:active .capture-inner {
+	transform: scale(0.85);
+	background: rgba(255, 255, 255, 0.9);
+}
+
 </style>
